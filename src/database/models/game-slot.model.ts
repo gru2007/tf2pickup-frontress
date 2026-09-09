@@ -1,4 +1,5 @@
 import type { Tf2Team } from '../../shared/types/tf2-team'
+import type { GameClassName } from '../../shared/types/game-class-name'
 import type { Tf2ClassName } from '../../shared/types/tf2-class-name'
 import type { SteamId64 } from '../../shared/types/steam-id-64'
 import type { GameSlotId } from '../../shared/types/game-slot-id'
@@ -19,6 +20,8 @@ export interface GameSlotModel {
   player: SteamId64
   team: Tf2Team
   gameClass: Tf2ClassName
+  // Frontress is roleless, but still uses the existing per-key ELO machinery.
+  ratingClass?: GameClassName
   status: SlotStatus
   connectionStatus: PlayerConnectionStatus
   skill?: number

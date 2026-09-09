@@ -8,12 +8,17 @@ import { events } from '../events'
 import { players } from '../players'
 import type { SteamId64 } from '../shared/types/steam-id-64'
 import { pickTeams, type PlayerSlot } from './pick-teams'
+import { createMutex } from './create-mutex'
 
 export async function create(
   queueSlots: QueueSlotModel[],
   map: string,
   friends: SteamId64[][] = [],
 ) {
+  return await createMutex.runExclusive(async () => await createUnlocked(queueSlots, map, friends))
+}
+
+async function createUnlocked(queueSlots: QueueSlotModel[], map: string, friends: SteamId64[][]) {
   const playerSlots: PlayerSlot[] = await Promise.all(queueSlots.map(queueSlotToPlayerSlot))
   const slots = pickTeams(playerSlots, { friends })
 

@@ -32,6 +32,19 @@ export enum GameServerProvider {
   tf2QuickServer = 'tf2quickserver',
 }
 
+export enum GameKind {
+  pickup = 'pickup',
+  frontress = 'frontress',
+}
+
+export interface FrontressGame {
+  externalMatchId: string
+  matchGroup: number
+  maxPlayers: number
+  serverConfig: string
+  matchEmulation: number
+}
+
 export interface GameServer {
   id: string
   provider: GameServerProvider
@@ -60,6 +73,9 @@ export interface GameModel {
   number: GameNumber
   map: string
   state: GameState
+  // Missing on games created before game kinds were introduced; those are pickups.
+  kind?: GameKind
+  frontress?: FrontressGame
 
   slots: GameSlotModel[]
   events: [GameCreated, ...GameEventModel[]]
@@ -70,6 +86,9 @@ export interface GameModel {
   score?: Record<Tf2Team, number>
 
   logSecret?: string
+  // Kept out of the public API. The authenticated Frontress API needs it to
+  // hand a configured server back to the game client.
+  password?: string
   connectString?: string
   stvConnectString?: string
 }

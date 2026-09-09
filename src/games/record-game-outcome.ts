@@ -1,4 +1,4 @@
-import type { Tf2ClassName } from '../shared/types/tf2-class-name'
+import type { GameClassName } from '../shared/types/game-class-name'
 import type { SteamId64 } from '../shared/types/steam-id-64'
 import { type PlayerElo } from '../database/models/player.model'
 import { GameState, type GameModel } from '../database/models/game.model'
@@ -15,8 +15,8 @@ export async function recordGameOutcome(game: GameModel): Promise<void> {
     return
   }
 
-  const eloMap = new Map<SteamId64, Partial<Record<Tf2ClassName, number>>>()
-  const gamesByClassMap = new Map<SteamId64, Partial<Record<Tf2ClassName, number>>>()
+  const eloMap = new Map<SteamId64, Partial<Record<GameClassName, number>>>()
+  const gamesByClassMap = new Map<SteamId64, Partial<Record<GameClassName, number>>>()
 
   await Promise.all(
     game.slots.map(async slot => {
@@ -49,10 +49,11 @@ export async function recordGameOutcome(game: GameModel): Promise<void> {
 
   await Promise.all(
     game.slots.map(async slot => {
+      const gameClass = slot.ratingClass ?? slot.gameClass
       await players.update(slot.player, {
         $inc: {
           'stats.totalGames': 1,
-          [`stats.gamesByClass.${slot.gameClass}`]: 1,
+          [`stats.gamesByClass.${gameClass}`]: 1,
         },
       })
     }),

@@ -6,6 +6,7 @@ import { GameEventType } from '../../database/models/game-event.model'
 import {
   type GameModel,
   type GameNumber,
+  GameKind,
   GameServerProvider,
   GameState,
 } from '../../database/models/game.model'
@@ -26,6 +27,7 @@ import type { ReservationId } from '@tf2pickup-org/serveme-tf-client'
 import { errors } from '../../errors'
 import { players } from '../../players'
 import type { RconCommand } from '../../shared/types/rcon-command'
+import { Tf2Team } from '../../shared/types/tf2-team'
 
 const configurators = new Map<GameNumber, AbortController>()
 const configureRetries = 2
@@ -109,6 +111,13 @@ async function configureTimeout(game: GameModel): Promise<number> {
     return secondsToMilliseconds(90) + configureRconTimeout
   }
 
+  if (game.gameServer?.provider === GameServerProvider.servemeTf) {
+    return (
+      secondsToMilliseconds(environment.SERVEME_TF_SERVER_BOOT_TIMEOUT_SECONDS) +
+      configureRconTimeout
+    )
+  }
+
   return configureRconTimeout
 }
 
@@ -120,10 +129,21 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
   const { signal } = options
 
   if (game.gameServer.provider === GameServerProvider.servemeTf) {
-    await servemeTf.waitForStart(Number(game.gameServer.id) as ReservationId)
+    const reservation = await servemeTf.waitForStart(Number(game.gameServer.id) as ReservationId)
+    const sdr = reservation.sdr
+    if (sdr?.final) {
+      game = await update(game.number, {
+        $set: {
+          'gameServer.address': sdr.ip,
+          'gameServer.port': sdr.port,
+          'gameServer.stvAddress': sdr.ip,
+          'gameServer.stvPort': sdr.tvPort,
+        },
+      })
+    }
   }
 
-  if (game.gameServer.provider === GameServerProvider.tf2QuickServer) {
+  if (game.gameServer?.provider === GameServerProvider.tf2QuickServer) {
     if (game.gameServer.pendingTaskId) {
       logger.info(
         { taskId: game.gameServer.pendingTaskId },
@@ -168,6 +188,7 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
       $set: {
         state: GameState.configuring,
         logSecret,
+        password,
       },
       $unset: {
         connectString: 1,
@@ -177,11 +198,18 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
 
     for await (const line of compileConfig(game, password)) {
       logger.debug(line)
-      await rcon.send(line)
+      const response = await rcon.send(line)
       if (line.startsWith('logaddress_add')) {
         await verifyLogTransmission({ rcon, logSecret, gameNumber: game.number, signal })
       }
       if (line.startsWith('changelevel')) {
+        await delay(secondsToMilliseconds(10))
+      }
+      if (
+        line.startsWith('tf_mm_match_begin') &&
+        response.toLowerCase().includes('unknown command')
+      ) {
+        await rcon.send(`changelevel ${game.map}`)
         await delay(secondsToMilliseconds(10))
       }
     }
@@ -231,6 +259,24 @@ async function* compileConfig(game: GameModel, password: string): AsyncGenerator
   yield `logaddress_add ${environment.LOG_RELAY_ADDRESS}:${environment.LOG_RELAY_PORT}`
   yield 'kickall'
 
+  if (game.kind === GameKind.frontress && game.frontress) {
+    const spec = game.frontress
+    yield `sv_password ${quote(password)}`
+    yield `sv_tags ${quote(`tfmm:${spec.externalMatchId}`)}`
+    yield `maxplayers ${spec.maxPlayers}`
+    yield `tf_match_emulation ${spec.matchEmulation}`
+    yield 'tf_match_emulation_restartmatch 0'
+    yield 'tf_match_emulation_randommap 0'
+    yield `tf_mm_trusted ${spec.matchEmulation === 0 ? 0 : 1}`
+    if (spec.serverConfig) yield `exec ${spec.serverConfig}`
+
+    const roster = game.slots
+      .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
+      .join(',')
+    yield `tf_mm_match_begin ${quote(spec.externalMatchId)} ${spec.matchGroup} ${quote(game.map)} ${quote(spec.serverConfig)} ${quote(password)} ${quote(roster)} ${spec.maxPlayers}`
+    return
+  }
+
   if (game.gameServer?.provider !== GameServerProvider.servemeTf) {
     // serveme.tf servers are already started with the proper map
     yield `changelevel ${game.map}`
@@ -267,4 +313,8 @@ async function* compileConfig(game: GameModel, password: string): AsyncGenerator
   for (const command of extraCommands) {
     yield command as RconCommand
   }
+}
+
+function quote(value: string): string {
+  return `"${value.replace(/[";\n]/g, '')}"`
 }

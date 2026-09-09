@@ -6,6 +6,7 @@ export const errors = {
   forbidden: httpErrors.forbidden,
   notFound: httpErrors.notFound,
   conflict: httpErrors.conflict,
+  badGateway: httpErrors.badGateway,
 
   internalServerError: httpErrors.internalServerError,
 } as const

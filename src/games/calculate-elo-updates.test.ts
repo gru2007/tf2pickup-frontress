@@ -14,6 +14,7 @@ import { Tf2Team } from '../shared/types/tf2-team'
 import { Tf2ClassName } from '../shared/types/tf2-class-name'
 import type { SteamId64 } from '../shared/types/steam-id-64'
 import type { GameSlotId } from '../shared/types/game-slot-id'
+import { frontressGameClass } from '../shared/types/game-class-name'
 
 // Fixed timestamps: 60-minute game
 const startedAt = new Date('2024-01-01T10:00:00Z')
@@ -75,6 +76,27 @@ const provisionalGames = () => 0
 const establishedGames = () => 10
 
 describe('calculateEloUpdates', () => {
+  it('uses the synthetic Frontress rating without adding it to the TF2 class enum', () => {
+    const game = makeGame({})
+    game.slots = game.slots.map(slot => ({ ...slot, ratingClass: frontressGameClass }))
+    const requestedClasses: string[] = []
+
+    const updates = calculateEloUpdates(
+      game,
+      (_steamId, gameClass) => {
+        requestedClasses.push(gameClass)
+        return defaultElo
+      },
+      () => 0,
+    )
+
+    expect(updates.map(update => update.gameClass)).toEqual([
+      frontressGameClass,
+      frontressGameClass,
+    ])
+    expect(requestedClasses.every(gameClass => gameClass === frontressGameClass)).toBe(true)
+  })
+
   describe('guard conditions', () => {
     it('returns empty array when game state is not ended', () => {
       const game = makeGame({ state: GameState.started })

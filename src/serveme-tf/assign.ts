@@ -32,13 +32,20 @@ export async function assign(game: GameModel, name?: string): Promise<GameServer
     `reservation created`,
   )
 
+  const sdr = reservation.sdr?.final ? reservation.sdr : null
+
   return {
     provider: GameServerProvider.servemeTf,
     id: reservation.id.toString(),
     name: reservation.server.name,
-    address: reservation.server.ip,
-    port: reservation.server.port,
+    address: sdr?.ip ?? reservation.server.ip,
+    port: sdr?.port ?? reservation.server.port,
     logSecret: reservation.logSecret,
+
+    ...(sdr && {
+      stvAddress: sdr.ip,
+      stvPort: sdr.tvPort,
+    }),
 
     rcon: {
       address: reservation.server.ip,

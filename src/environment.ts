@@ -30,6 +30,12 @@ const environmentSchema = z.object({
   LOG_RELAY_PORT: z.coerce.number(),
   LOGS_TF_API_KEY: z.string().optional(),
   GAME_SERVER_SECRET: z.string(),
+  FRONTRESS_GATEWAY_SECRET: z.preprocess(
+    value => (value === '' ? undefined : value),
+    z.string().min(16).optional(),
+  ),
+  FRONTRESS_MAX_MATCH_SECONDS: z.coerce.number().int().positive().default(10800),
+  FRONTRESS_IDLE_END_SECONDS: z.coerce.number().int().positive().default(300),
   THUMBNAIL_SERVICE_URL: z.url().default('https://mapthumbnails.tf2pickup.org'),
 
   ATLAS_URL: z.url().default('https://atlas.tf2pickup.org'),
@@ -43,6 +49,7 @@ const environmentSchema = z.object({
 
   SERVEME_TF_API_ENDPOINT: z.string().default(KnownEndpoint.europe),
   SERVEME_TF_API_KEY: z.string().optional(),
+  SERVEME_TF_SERVER_BOOT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(180),
 
   TF2_QUICK_SERVER_CLIENT_ID: z.string().optional(),
   TF2_QUICK_SERVER_CLIENT_SECRET: z.string().optional(),

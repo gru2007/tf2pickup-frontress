@@ -1,6 +1,7 @@
 import type { Bot } from '../../shared/types/bot'
 import type { SteamId64 } from '../../shared/types/steam-id-64'
 import { Tf2ClassName } from '../../shared/types/tf2-class-name'
+import type { GameClassName } from '../../shared/types/game-class-name'
 import type { GameNumber } from './game.model'
 
 export interface PlayerAvatar {
@@ -41,12 +42,12 @@ export interface Etf2lProfile {
 
 export interface PlayerStats {
   totalGames: number
-  gamesByClass: Partial<Record<Tf2ClassName, number>>
+  gamesByClass: Partial<Record<GameClassName, number>>
 }
 
 export type PlayerSkill = Partial<Record<Tf2ClassName, number>>
 
-export type PlayerElo = Partial<Record<Tf2ClassName, number>>
+export type PlayerElo = Partial<Record<GameClassName, number>>
 
 export interface PlayerModel {
   name: string

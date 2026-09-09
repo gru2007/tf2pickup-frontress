@@ -4,6 +4,7 @@ import { players } from '../../players'
 import { configuration } from '../../configuration'
 import { events } from '../../events'
 import { GameEventType, type PlayerReplaced } from '../../database/models/game-event.model'
+import { frontressGameClass } from '../../shared/types/game-class-name'
 
 export default fp(
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -24,9 +25,12 @@ export default fp(
       )
 
       await Promise.all(
-        game.slots.map(async ({ gameClass, player }) => {
+        game.slots.map(async ({ gameClass, ratingClass, player }) => {
           const queueCooldown = await configuration.get('games.join_queue_cooldown')
-          const cooldownMs = substitutes.has(player) ? 0 : queueCooldown[gameClass]
+          const cooldownMs =
+            substitutes.has(player) || ratingClass === frontressGameClass
+              ? 0
+              : queueCooldown[gameClass]
           await tasks.schedule('games.freePlayer', cooldownMs, { player })
         }),
       )

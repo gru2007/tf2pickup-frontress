@@ -8,7 +8,7 @@ import { GameState, type GameModel } from '../database/models/game.model'
 import { SlotStatus } from '../database/models/game-slot.model'
 import { Tf2Team } from '../shared/types/tf2-team'
 import type { SteamId64 } from '../shared/types/steam-id-64'
-import type { Tf2ClassName } from '../shared/types/tf2-class-name'
+import type { GameClassName } from '../shared/types/game-class-name'
 import type { GameNumber } from '../database/models/game.model'
 
 export const defaultElo = 1500
@@ -17,7 +17,7 @@ const playTimeThreshold = 0.8
 
 export interface EloUpdate {
   steamId: SteamId64
-  gameClass: Tf2ClassName
+  gameClass: GameClassName
   newElo: number
   at: Date
   game: GameNumber
@@ -39,8 +39,8 @@ function actualScore(playerTeam: Tf2Team, score: Record<Tf2Team, number>): numbe
 
 export function calculateEloUpdates(
   game: GameModel,
-  getElo: (steamId: SteamId64, gameClass: Tf2ClassName) => number,
-  getGamesPlayed: (steamId: SteamId64, gameClass: Tf2ClassName) => number,
+  getElo: (steamId: SteamId64, gameClass: GameClassName) => number,
+  getGamesPlayed: (steamId: SteamId64, gameClass: GameClassName) => number,
 ): EloUpdate[] {
   if (game.state !== GameState.ended || !game.score) {
     return []
@@ -83,25 +83,27 @@ export function calculateEloUpdates(
   const updates: EloUpdate[] = []
 
   for (const slot of eligibleSlots) {
-    const playerElo = getElo(slot.player, slot.gameClass)
+    const gameClass = slot.ratingClass ?? slot.gameClass
+    const playerElo = getElo(slot.player, gameClass)
 
     const enemies = eligibleSlots.filter(s => s.team !== slot.team)
-    const sameClassEnemies = enemies.filter(s => s.gameClass === slot.gameClass)
+    const sameClassEnemies = enemies.filter(s => (s.ratingClass ?? s.gameClass) === gameClass)
     const comparison = sameClassEnemies.length > 0 ? sameClassEnemies : enemies
 
     if (comparison.length === 0) continue
 
     const enemyAvgElo =
-      comparison.reduce((sum, s) => sum + getElo(s.player, s.gameClass), 0) / comparison.length
+      comparison.reduce((sum, s) => sum + getElo(s.player, s.ratingClass ?? s.gameClass), 0) /
+      comparison.length
 
     const E = expectedScore(playerElo, enemyAvgElo)
     const S = actualScore(slot.team, score)
-    const K = kFactor(getGamesPlayed(slot.player, slot.gameClass))
+    const K = kFactor(getGamesPlayed(slot.player, gameClass))
     const newElo = Math.round(playerElo + K * (S - E))
 
     updates.push({
       steamId: slot.player,
-      gameClass: slot.gameClass,
+      gameClass,
       newElo,
       at: endedAt,
       game: game.number,

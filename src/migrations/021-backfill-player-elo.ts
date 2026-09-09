@@ -5,7 +5,7 @@ import { GameState } from '../database/models/game.model'
 import { GameEventType } from '../database/models/game-event.model'
 import type { PlayerElo } from '../database/models/player.model'
 import type { SteamId64 } from '../shared/types/steam-id-64'
-import type { Tf2ClassName } from '../shared/types/tf2-class-name'
+import type { GameClassName } from '../shared/types/game-class-name'
 import type { GameNumber } from '../database/models/game.model'
 import { calculateEloUpdates, defaultElo as defaultEloValue } from '../games/calculate-elo-updates'
 
@@ -22,8 +22,8 @@ export async function up() {
   logger.info(`backfilling ELO from ${games.length} games since ${since.toISOString()}`)
 
   // In-memory state: updated as each game is processed in order
-  const eloState = new Map<SteamId64, Partial<Record<Tf2ClassName, number>>>()
-  const gamesPlayedState = new Map<SteamId64, Partial<Record<Tf2ClassName, number>>>()
+  const eloState = new Map<SteamId64, Partial<Record<GameClassName, number>>>()
+  const gamesPlayedState = new Map<SteamId64, Partial<Record<GameClassName, number>>>()
   const eloHistoryState = new Map<SteamId64, { at: Date; elo: PlayerElo; game: GameNumber }[]>()
 
   for (const game of games) {
@@ -49,9 +49,10 @@ export async function up() {
     for (const slot of game.slots) {
       if (!eligibleSteamIds.has(slot.player)) continue
       const current = gamesPlayedState.get(slot.player) ?? {}
+      const gameClass = slot.ratingClass ?? slot.gameClass
       gamesPlayedState.set(slot.player, {
         ...current,
-        [slot.gameClass]: (current[slot.gameClass] ?? 0) + 1,
+        [gameClass]: (current[gameClass] ?? 0) + 1,
       })
     }
   }
