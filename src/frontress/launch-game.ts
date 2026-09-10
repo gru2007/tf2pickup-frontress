@@ -17,10 +17,17 @@ export function launchGame(gameNumber: GameNumber): void {
 async function doLaunch(gameNumber: GameNumber): Promise<void> {
   for (;;) {
     const game = await collections.games.findOne({ number: gameNumber })
-    if (!game || [GameState.launching, GameState.started, GameState.ended].includes(game.state))
+    if (
+      !game ||
+      [GameState.launching, GameState.started, GameState.ended, GameState.interrupted].includes(
+        game.state,
+      )
+    )
       return
     try {
       if (!game.gameServer) await assignGameServer(gameNumber, { retries: 3 })
+      const current = await collections.games.findOne({ number: gameNumber })
+      if (!current || [GameState.ended, GameState.interrupted].includes(current.state)) return
       await configure(gameNumber)
       const configured = await collections.games.findOne(
         { number: gameNumber },

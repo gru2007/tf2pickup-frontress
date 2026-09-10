@@ -1,16 +1,23 @@
+import { randomUUID } from 'node:crypto'
 import type { z } from 'zod'
 import { collections } from '../database/collections'
-import { GameKind, GameState, type GameModel } from '../database/models/game.model'
 import { PlayerConnectionStatus, SlotStatus } from '../database/models/game-slot.model'
+import {
+  FrontressAdmissionState,
+  GameKind,
+  GameState,
+  type FrontressAdmission,
+  type GameModel,
+} from '../database/models/game.model'
 import { errors } from '../errors'
 import { createMutex } from '../games/create-mutex'
 import { update } from '../games/update'
-import { withRcon } from '../games/rcon/with-rcon'
 import { frontressGameClass } from '../shared/types/game-class-name'
 import type { GameSlotId } from '../shared/types/game-slot-id'
-import type { RconCommand } from '../shared/types/rcon-command'
 import { Tf2ClassName } from '../shared/types/tf2-class-name'
 import { Tf2Team } from '../shared/types/tf2-team'
+import { applyAdmission } from './apply-admission'
+import { assertPlayersAvailable } from './assert-players-available'
 import { ensurePlayers } from './ensure-players'
 import { addPlayersSchema } from './schemas/add-players'
 
@@ -20,7 +27,7 @@ export async function addPlayers(
   externalMatchId: string,
   additions: AddPlayers,
 ): Promise<GameModel> {
-  return await createMutex.runExclusive(async () => {
+  const reserved = await createMutex.runExclusive(async () => {
     const game = await collections.games.findOne({ 'frontress.externalMatchId': externalMatchId })
     if (game?.kind !== GameKind.frontress || !game.frontress) {
       throw errors.notFound('Frontress game not found')
@@ -29,85 +36,87 @@ export async function addPlayers(
       throw errors.conflict('Frontress game is not accepting players')
     }
 
-    const existing = new Set(game.slots.map(slot => slot.player))
     const unique = new Set(additions.map(player => player.steamId))
     if (unique.size !== additions.length) throw errors.badRequest('duplicate player')
-    const existingAdditions = additions.filter(player => existing.has(player.steamId))
-    if (existingAdditions.length === additions.length) {
-      const teamsMatch = additions.every(
-        player => game.slots.find(slot => slot.player === player.steamId)?.team === player.team,
-      )
+
+    const applied = new Map(game.slots.map(slot => [slot.player, slot]))
+    const pendingAdmissions = (game.frontress.admissions ?? []).filter(
+      admission => admission.state === FrontressAdmissionState.pending,
+    )
+    const pending = new Map(
+      pendingAdmissions.flatMap(admission => admission.slots.map(slot => [slot.player, slot])),
+    )
+    const existing = additions.filter(
+      player => applied.has(player.steamId) || pending.has(player.steamId),
+    )
+    if (existing.length === additions.length) {
+      const teamsMatch = additions.every(player => {
+        const slot = applied.get(player.steamId) ?? pending.get(player.steamId)
+        return slot?.team === player.team
+      })
       if (!teamsMatch) throw errors.conflict('player already exists on another team')
       await assignActiveGame(game, additions)
-      return game
+      const admission = pendingAdmissions.find(value =>
+        additions.every(player => value.slots.some(slot => slot.player === player.steamId)),
+      )
+      return { game, admissionId: admission?.id }
     }
-    if (existingAdditions.length > 0)
-      throw errors.conflict('request mixes existing and new players')
-    if (game.slots.length + additions.length > game.frontress.maxPlayers) {
+    if (existing.length > 0) throw errors.conflict('request mixes existing and new players')
+
+    const reservedSlots = [
+      ...game.slots,
+      ...pendingAdmissions.flatMap(admission => admission.slots),
+    ]
+    if (reservedSlots.length + additions.length > game.frontress.maxPlayers) {
       throw errors.conflict('Frontress game is full')
     }
-
-    const owned = await collections.players
-      .find(
-        {
-          steamId: { $in: additions.map(player => player.steamId) },
-          activeGame: { $exists: true },
-        },
-        { projection: { steamId: 1, activeGame: 1 } },
-      )
-      .toArray()
-    const conflict = owned.find(player => player.activeGame !== game.number)
-    if (conflict) throw errors.conflict(`player ${conflict.steamId} already has an active game`)
-
     const teamCap = game.frontress.maxPlayers / 2
     for (const team of Object.values(Tf2Team)) {
-      const count = game.slots.filter(slot => slot.team === team).length
+      const count = reservedSlots.filter(slot => slot.team === team).length
       const added = additions.filter(player => player.team === team).length
       if (count + added > teamCap) throw errors.conflict(`${team} team is full`)
     }
 
     await ensurePlayers(additions)
-    const roster = additions
-      .map(player => `${player.steamId}:${player.team === Tf2Team.red ? 2 : 3}`)
-      .join(',')
-    const command = `tf_mm_match_add "${externalMatchId}" "${roster}"` as RconCommand
-    const response = await withRcon(game, async ({ rcon }) => await rcon.send(command))
-    if (
-      !response.toLowerCase().includes('unknown command') &&
-      !response.includes('TFMM_MATCH_ADD_OK') &&
-      !response.includes('TFMM_MATCH_ADD_PLAIN')
-    ) {
-      throw errors.badGateway(`game server did not acknowledge tf_mm_match_add`)
-    }
-
+    await assertPlayersAvailable(
+      additions.map(player => player.steamId),
+      game.number,
+    )
     const counts = {
-      [Tf2Team.red]: game.slots.filter(slot => slot.team === Tf2Team.red).length,
-      [Tf2Team.blu]: game.slots.filter(slot => slot.team === Tf2Team.blu).length,
+      [Tf2Team.red]: reservedSlots.filter(slot => slot.team === Tf2Team.red).length,
+      [Tf2Team.blu]: reservedSlots.filter(slot => slot.team === Tf2Team.blu).length,
     }
-    const slots = additions.map(player => ({
-      id: `${player.team}-${frontressGameClass}-${++counts[player.team]}` as GameSlotId,
-      player: player.steamId,
-      team: player.team,
-      gameClass: Tf2ClassName.scout,
-      ratingClass: frontressGameClass,
-      status: SlotStatus.active,
-      connectionStatus: PlayerConnectionStatus.offline,
-    }))
+    const admission: FrontressAdmission = {
+      id: randomUUID(),
+      state: FrontressAdmissionState.pending,
+      requestedAt: new Date(),
+      slots: additions.map(player => ({
+        id: `${player.team}-${frontressGameClass}-${++counts[player.team]}` as GameSlotId,
+        player: player.steamId,
+        team: player.team,
+        gameClass: Tf2ClassName.scout,
+        ratingClass: frontressGameClass,
+        status: SlotStatus.active,
+        connectionStatus: PlayerConnectionStatus.offline,
+      })),
+    }
     const changed = await update(
       { number: game.number, state: { $in: [GameState.launching, GameState.started] } },
-      { $push: { slots: { $each: slots } } },
+      { $push: { 'frontress.admissions': admission } },
     )
-    await assignActiveGame(game, additions)
-    return changed
+    await assignActiveGame(changed, additions)
+    return { game: changed, admissionId: admission.id }
   })
+
+  if (!reserved.admissionId) return reserved.game
+  return await applyAdmission(reserved.game.number, reserved.admissionId)
 }
 
 async function assignActiveGame(game: GameModel, players: AddPlayers): Promise<void> {
-  const conflict = await collections.players.findOne({
-    steamId: { $in: players.map(player => player.steamId) },
-    activeGame: { $exists: true, $ne: game.number },
-  })
-  if (conflict) throw errors.conflict(`player ${conflict.steamId} already has an active game`)
+  await assertPlayersAvailable(
+    players.map(player => player.steamId),
+    game.number,
+  )
   await collections.players.updateMany(
     { steamId: { $in: players.map(player => player.steamId) } },
     { $set: { activeGame: game.number } },

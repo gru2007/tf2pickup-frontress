@@ -24,8 +24,14 @@ export default fp(
           .map(({ replacement }) => replacement),
       )
 
+      const slots = new Map(
+        [
+          ...game.slots,
+          ...(game.frontress?.admissions ?? []).flatMap(admission => admission.slots),
+        ].map(slot => [slot.player, slot]),
+      )
       await Promise.all(
-        game.slots.map(async ({ gameClass, ratingClass, player }) => {
+        [...slots.values()].map(async ({ gameClass, ratingClass, player }) => {
           const queueCooldown = await configuration.get('games.join_queue_cooldown')
           const cooldownMs =
             substitutes.has(player) || ratingClass === frontressGameClass

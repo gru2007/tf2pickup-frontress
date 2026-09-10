@@ -12,6 +12,7 @@ import { Tf2ClassName } from '../shared/types/tf2-class-name'
 import { createGameSchema } from './schemas/create-game'
 import { ensurePlayers } from './ensure-players'
 import { createMutex } from '../games/create-mutex'
+import { assertPlayersAvailable } from './assert-players-available'
 
 type CreateGame = z.infer<typeof createGameSchema>
 
@@ -33,18 +34,7 @@ async function createGameUnlocked(
     return { game: existing, created: false }
   }
 
-  const activePlayers = await collections.players
-    .find(
-      {
-        steamId: { $in: input.players.map(player => player.steamId) },
-        activeGame: { $exists: true },
-      },
-      { projection: { steamId: 1, activeGame: 1 } },
-    )
-    .toArray()
-  if (activePlayers.length > 0) {
-    throw errors.conflict(`player ${activePlayers[0]!.steamId} already has an active game`)
-  }
+  await assertPlayersAvailable(input.players.map(player => player.steamId))
 
   await ensurePlayers(input.players)
   const counts = { red: 0, blu: 0 }
@@ -59,6 +49,7 @@ async function createGameUnlocked(
       maxPlayers: input.maxPlayers,
       serverConfig: input.serverConfig,
       matchEmulation: input.matchEmulation,
+      admissions: [],
     },
     slots: input.players.map(player => ({
       id: `${player.team}-${frontressGameClass}-${++counts[player.team]}` as GameSlotId,
@@ -95,11 +86,10 @@ async function createGameUnlocked(
 }
 
 async function assignActiveGame(game: GameModel): Promise<void> {
-  const conflict = await collections.players.findOne({
-    steamId: { $in: game.slots.map(slot => slot.player) },
-    activeGame: { $exists: true, $ne: game.number },
-  })
-  if (conflict) throw errors.conflict(`player ${conflict.steamId} already has an active game`)
+  await assertPlayersAvailable(
+    game.slots.map(slot => slot.player),
+    game.number,
+  )
   await collections.players.updateMany(
     { steamId: { $in: game.slots.map(slot => slot.player) } },
     { $set: { activeGame: game.number } },

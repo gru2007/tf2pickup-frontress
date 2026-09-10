@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createGameSchema } from './create-game'
 
 const game = {
-  externalMatchId: 'match_1',
+  externalMatchId: '0123456789abcdef',
   map: 'koth_product_final',
   matchGroup: 7,
   maxPlayers: 4,

@@ -37,12 +37,26 @@ export enum GameKind {
   frontress = 'frontress',
 }
 
+export enum FrontressAdmissionState {
+  pending = 'pending',
+  applied = 'applied',
+}
+
+export interface FrontressAdmission {
+  id: string
+  state: FrontressAdmissionState
+  requestedAt: Date
+  appliedAt?: Date
+  slots: GameSlotModel[]
+}
+
 export interface FrontressGame {
   externalMatchId: string
   matchGroup: number
   maxPlayers: number
   serverConfig: string
   matchEmulation: number
+  admissions?: FrontressAdmission[]
 }
 
 export interface GameServer {

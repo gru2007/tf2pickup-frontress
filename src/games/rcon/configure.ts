@@ -125,6 +125,9 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
   if (game.gameServer === undefined) {
     throw errors.badRequest('gameServer is undefined')
   }
+  if ([GameState.ended, GameState.interrupted].includes(game.state)) {
+    throw errors.conflict('game has already ended')
+  }
   logger.info({ game }, `configuring game #${game.number}...`)
   const { signal } = options
 
@@ -184,17 +187,20 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
       throw new Error(`${signal.reason}`)
     }
 
-    game = await update(game.number, {
-      $set: {
-        state: GameState.configuring,
-        logSecret,
-        password,
+    game = await update(
+      { number: game.number, state: { $in: [GameState.created, GameState.configuring] } },
+      {
+        $set: {
+          state: GameState.configuring,
+          logSecret,
+          password,
+        },
+        $unset: {
+          connectString: 1,
+          stvConnectString: 1,
+        },
       },
-      $unset: {
-        connectString: 1,
-        stvConnectString: 1,
-      },
-    })
+    )
 
     for await (const line of compileConfig(game, password)) {
       logger.debug(line)
@@ -205,12 +211,12 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
       if (line.startsWith('changelevel')) {
         await delay(secondsToMilliseconds(10))
       }
-      if (
-        line.startsWith('tf_mm_match_begin') &&
-        response.toLowerCase().includes('unknown command')
-      ) {
-        await rcon.send(`changelevel ${game.map}`)
-        await delay(secondsToMilliseconds(10))
+      if (line.startsWith('tf_mm_match_begin')) {
+        const acknowledged = response
+          .split(/\r?\n/)
+          .map(value => value.trim())
+          .includes(`TFMM_MATCH_BEGIN_OK ${game.frontress!.externalMatchId}`)
+        if (!acknowledged) throw errors.badGateway('game server is incompatible with Frontress')
       }
     }
 
@@ -233,19 +239,22 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
       throw new Error(`${signal.reason}`)
     }
 
-    game = await update(game.number, {
-      $set: {
-        connectString,
-        stvConnectString,
-        state: GameState.launching,
-      },
-      $push: {
-        events: {
-          event: GameEventType.gameServerInitialized,
-          at: new Date(),
+    game = await update(
+      { number: game.number, state: GameState.configuring },
+      {
+        $set: {
+          connectString,
+          stvConnectString,
+          state: GameState.launching,
+        },
+        $push: {
+          events: {
+            event: GameEventType.gameServerInitialized,
+            at: new Date(),
+          },
         },
       },
-    })
+    )
     events.emit('game:gameServerInitialized', { game })
 
     return {

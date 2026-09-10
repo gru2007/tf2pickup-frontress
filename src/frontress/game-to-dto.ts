@@ -3,6 +3,7 @@ import { GameEventType } from '../database/models/game-event.model'
 
 export function gameToDto(game: GameModel) {
   const ready = game.state === GameState.launching || game.state === GameState.started
+  const initialized = game.events.find(event => event.event === GameEventType.gameServerInitialized)
   const started = game.events.find(event => event.event === GameEventType.gameStarted)
   return {
     game: game.number,
@@ -11,6 +12,8 @@ export function gameToDto(game: GameModel) {
     map: game.map,
     maxPlayers: game.frontress?.maxPlayers,
     matchGroup: game.frontress?.matchGroup,
+    createdAt: game.events[0].at.toISOString(),
+    readyAt: initialized?.at.toISOString() ?? null,
     startedAt: started?.at.toISOString() ?? null,
     score: game.score ?? null,
     players: game.slots.map(slot => ({

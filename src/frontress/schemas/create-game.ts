@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { steamId64 } from '../../shared/schemas/steam-id-64'
 import { Tf2Team } from '../../shared/types/tf2-team'
+import { externalMatchIdSchema } from './external-match-id'
 
 const player = z.object({
   steamId: steamId64,
@@ -10,12 +11,7 @@ const player = z.object({
 
 export const createGameSchema = z
   .object({
-    externalMatchId: z
-      .string()
-      .trim()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9_-]+$/),
+    externalMatchId: externalMatchIdSchema,
     map: z
       .string()
       .trim()

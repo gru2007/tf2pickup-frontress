@@ -13,37 +13,51 @@ export async function forceEnd(
   actor?: SteamId64 | Bot,
   reason = GameEndedReason.interrupted,
 ) {
+  const existing = await collections.games.findOne({ number: gameNumber })
+  if (!existing) throw new Error(`game ${gameNumber} not found`)
+  if ([GameState.ended, GameState.interrupted].includes(existing.state)) return existing
+
   await collections.gamesSubstituteRequests.deleteMany({ gameNumber })
-  const game = await update(
-    {
-      number: gameNumber,
-    },
-    {
-      $set: {
-        state: GameState.interrupted,
-        'slots.$[slot].status': SlotStatus.active,
-      },
-      $push: {
-        events: {
-          at: new Date(),
-          event: GameEventType.gameEnded,
-          reason,
-          ...(actor && { actor }),
+  try {
+    const game = await update(
+      {
+        number: gameNumber,
+        state: {
+          $in: [GameState.created, GameState.configuring, GameState.launching, GameState.started],
         },
       },
-    },
-    {
-      arrayFilters: [
-        {
-          'slot.status': { $eq: SlotStatus.waitingForSubstitute },
+      {
+        $set: {
+          state: GameState.interrupted,
+          'slots.$[slot].status': SlotStatus.active,
         },
-      ],
-    },
-  )
-  await activityLog.record({
-    type: 'game force-ended',
-    gameNumber,
-    ...(actor && { actor }),
-  })
-  events.emit('game:ended', { game })
+        $push: {
+          events: {
+            at: new Date(),
+            event: GameEventType.gameEnded,
+            reason,
+            ...(actor && { actor }),
+          },
+        },
+      },
+      {
+        arrayFilters: [
+          {
+            'slot.status': { $eq: SlotStatus.waitingForSubstitute },
+          },
+        ],
+      },
+    )
+    await activityLog.record({
+      type: 'game force-ended',
+      gameNumber,
+      ...(actor && { actor }),
+    })
+    events.emit('game:ended', { game })
+    return game
+  } catch (error) {
+    const final = await collections.games.findOne({ number: gameNumber })
+    if (final && [GameState.ended, GameState.interrupted].includes(final.state)) return final
+    throw error
+  }
 }
