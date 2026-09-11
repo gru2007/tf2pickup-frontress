@@ -19,6 +19,7 @@ export const createGameSchema = z
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
     matchGroup: z.number().int().min(0),
+    matchMode: z.enum(['frontline', 'ranked']),
     maxPlayers: z.number().int().min(2).max(100),
     serverConfig: z
       .string()
