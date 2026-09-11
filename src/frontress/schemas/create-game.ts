@@ -19,7 +19,10 @@ export const createGameSchema = z
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
     matchGroup: z.number().int().min(0),
-    matchMode: z.enum(['frontline', 'ranked']),
+    // Optional only for rolling compatibility with an older gateway. New
+    // gateways always send this explicitly; create-game derives the legacy
+    // value from matchEmulation when it is absent.
+    matchMode: z.enum(['frontline', 'ranked']).optional(),
     maxPlayers: z.number().int().min(2).max(100),
     serverConfig: z
       .string()
