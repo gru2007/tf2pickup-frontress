@@ -53,6 +53,8 @@ export interface FrontressAdmission {
 export interface FrontressGame {
   externalMatchId: string
   matchGroup: number
+  // Missing on games created before match-mode propagation was added.
+  matchMode?: 'frontline' | 'ranked'
   maxPlayers: number
   serverConfig: string
   matchEmulation: number
