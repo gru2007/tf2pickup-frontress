@@ -34,6 +34,14 @@ export async function ensureMatchReservation(
   const startsAt = new Date()
   const password = randomBytes(16).toString('hex')
   const rcon = randomBytes(16).toString('hex')
+  const matchMode =
+    game.frontress!.matchMode === 'ranked'
+      ? 'ranked'
+      : game.frontress!.matchMode === 'frontline'
+        ? 'casual'
+        : game.frontress!.matchEmulation === 2
+          ? 'ranked'
+          : 'casual'
   const created = await client.httpClient.post<ReservationResponse, { reservation: object }>(
     '/reservations',
     {
@@ -47,6 +55,7 @@ export async function ensureMatchReservation(
         enable_demos_tf: true,
         first_map: game.map,
         match_id: matchId,
+        match_mode: matchMode,
         match_config: game.frontress!.serverConfig,
       },
     },
