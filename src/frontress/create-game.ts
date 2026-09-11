@@ -15,6 +15,7 @@ import { createMutex } from '../games/create-mutex'
 import { assertPlayersAvailable } from './assert-players-available'
 
 type CreateGame = z.infer<typeof createGameSchema>
+type FrontressMatchMode = 'frontline' | 'ranked'
 
 export async function createGame(
   input: CreateGame,
@@ -46,7 +47,7 @@ async function createGameUnlocked(
     frontress: {
       externalMatchId: input.externalMatchId,
       matchGroup: input.matchGroup,
-      matchMode: input.matchMode,
+      matchMode: effectiveMatchMode(input),
       maxPlayers: input.maxPlayers,
       serverConfig: input.serverConfig,
       matchEmulation: input.matchEmulation,
@@ -102,6 +103,10 @@ async function getNextGameNumber(): Promise<GameNumber> {
   return (latest ? latest.number + 1 : 1) as GameNumber
 }
 
+function effectiveMatchMode(input: CreateGame): FrontressMatchMode {
+  return input.matchMode ?? (input.matchEmulation === 2 ? 'ranked' : 'frontline')
+}
+
 function assertSameGame(game: GameModel, input: CreateGame): void {
   const roster = game.slots
     .map(slot => `${slot.player}:${slot.team}`)
@@ -115,7 +120,7 @@ function assertSameGame(game: GameModel, input: CreateGame): void {
     game.kind !== GameKind.frontress ||
     game.map !== input.map ||
     game.frontress?.matchGroup !== input.matchGroup ||
-    (game.frontress.matchMode !== undefined && game.frontress.matchMode !== input.matchMode) ||
+    (game.frontress.matchMode !== undefined && game.frontress.matchMode !== effectiveMatchMode(input)) ||
     game.frontress.maxPlayers !== input.maxPlayers ||
     game.frontress.serverConfig !== input.serverConfig ||
     game.frontress.matchEmulation !== input.matchEmulation ||
