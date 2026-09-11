@@ -46,6 +46,7 @@ async function createGameUnlocked(
     frontress: {
       externalMatchId: input.externalMatchId,
       matchGroup: input.matchGroup,
+      matchMode: input.matchMode,
       maxPlayers: input.maxPlayers,
       serverConfig: input.serverConfig,
       matchEmulation: input.matchEmulation,
@@ -114,6 +115,7 @@ function assertSameGame(game: GameModel, input: CreateGame): void {
     game.kind !== GameKind.frontress ||
     game.map !== input.map ||
     game.frontress?.matchGroup !== input.matchGroup ||
+    (game.frontress.matchMode !== undefined && game.frontress.matchMode !== input.matchMode) ||
     game.frontress.maxPlayers !== input.maxPlayers ||
     game.frontress.serverConfig !== input.serverConfig ||
     game.frontress.matchEmulation !== input.matchEmulation ||
