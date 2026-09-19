@@ -18,16 +18,21 @@ export async function waitForFrontressMatchReady(
   beginResponse: string,
   send: (command: string) => Promise<string>,
 ): Promise<void> {
-  const args = [...beginCommand.matchAll(/"([^"]*)"|(\S+)/g)].map(match => match[1] ?? match[2])
+  const args = [...beginCommand.matchAll(/"([^"]*)"|(\S+)/g)].map(
+    match => match[1] ?? match[2] ?? '',
+  )
   if (args.length !== 8 || args[0] !== 'tf_mm_match_begin') {
     throw new Error('invalid tf_mm_match_begin command: cannot check admissions')
   }
 
-  const matchId = args[1]
-  const map = args[3]
-  const roster = args[6]
-  if (!/^[0-9a-f]{1,16}$/i.test(matchId) || !/^[a-z0-9_]+$/i.test(map) ||
-      !/^\d+:[23](,\d+:[23])*$/.test(roster)) {
+  const matchId = args[1] ?? ''
+  const map = args[3] ?? ''
+  const roster = args[6] ?? ''
+  if (
+    !/^[0-9a-f]{1,16}$/i.test(matchId) ||
+    !/^[a-z0-9_./-]+$/i.test(map) ||
+    !/^\d+:[23](,\d+:[23])*$/.test(roster)
+  ) {
     throw new Error(`match ${matchId}: invalid map or initial roster for readiness check`)
   }
 
@@ -51,13 +56,18 @@ export async function waitForFrontressMatchReady(
     if (failure) throw new Error(`match ${matchId}: ${failure}`)
 
     if (reply.includes('Unknown command "tf_mm_match_ready"')) {
-      throw new Error(`match ${matchId}: dedicated server lacks tf_mm_match_ready; update the game server image`)
+      throw new Error(
+        `match ${matchId}: dedicated server lacks tf_mm_match_ready; update the game server image`,
+      )
     }
 
-    lastStatus = lines.find(line => line.startsWith(`TFMM_MATCH_READY_PENDING ${matchId}`)) ??
+    lastStatus =
+      lines.find(line => line.startsWith(`TFMM_MATCH_READY_PENDING ${matchId}`)) ??
       (lines.find(line => line.length > 0) ?? lastStatus)
     await delay(READY_POLL_MS)
   }
 
-  throw new Error(`match ${matchId}: admission readiness timed out after ${READY_TIMEOUT_MS}ms (${lastStatus})`)
+  throw new Error(
+    `match ${matchId}: admission readiness timed out after ${READY_TIMEOUT_MS}ms (${lastStatus})`,
+  )
 }
