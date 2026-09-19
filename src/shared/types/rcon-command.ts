@@ -5,6 +5,7 @@ export type RconCommand =
   | `sm_game_player_del ${string}`
   | `sm_game_player_whitelist ${0 | 1}`
   | `tf_mm_match_begin ${string}`
+  | `tf_mm_match_ready ${string}`
   | `tf_mm_match_add ${string}`
   | `tf_mm_match_end ${string}`
   | `tf_match_emulation ${number}`

@@ -28,6 +28,7 @@ import { errors } from '../../errors'
 import { players } from '../../players'
 import type { RconCommand } from '../../shared/types/rcon-command'
 import { Tf2Team } from '../../shared/types/tf2-team'
+import { waitForFrontressMatch } from './wait-for-frontress-match'
 
 const configurators = new Map<GameNumber, AbortController>()
 const configureRetries = 2
@@ -217,6 +218,16 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
           .map(value => value.trim())
           .includes(`TFMM_MATCH_BEGIN_OK ${game.frontress!.externalMatchId}`)
         if (!acknowledged) throw errors.badGateway('game server is incompatible with Frontress')
+
+        await waitForFrontressMatch({
+          rcon,
+          matchId: game.frontress!.externalMatchId,
+          map: game.map,
+          roster: game.slots
+            .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
+            .join(','),
+          signal,
+        })
       }
     }
 
