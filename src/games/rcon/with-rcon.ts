@@ -4,7 +4,6 @@ import { assertIsError } from '../../utils/assert-is-error'
 import { logger } from '../../logger'
 import { errors } from '../../errors'
 import type { RconCommand } from '../../shared/types/rcon-command'
-import { waitForFrontressMatchReady } from './wait-for-frontress-match-ready'
 
 export interface Rcon {
   send: (command: RconCommand) => Promise<string>
@@ -34,27 +33,14 @@ export async function withRcon<T>(
       logger.error(error, `game #${game.number}: rcon error`)
     })
 
-    const sendRaw = async (command: string): Promise<string> => {
-      const result = await rcon!.send(command)
-      if (!rcon!.authenticated) {
-        await rcon!.connect()
-      }
-      return result
-    }
-
     return await callback({
       rcon: {
         send: async (command: RconCommand) => {
-          const result = await sendRaw(command)
-          // Publishing a lobby is not the same as reserving each player's
-          // CMatchInfo seat. Never return the begin acknowledgement to
-          // configure.ts until the dedicated server's strict gate will admit
-          // the complete initial roster. That keeps the game in configuring
-          // and prevents the coordinator from assigning clients prematurely.
-          if (command.startsWith('tf_mm_match_begin ')) {
-            await waitForFrontressMatchReady(command, result, sendRaw)
+          const ret = await rcon!.send(command)
+          if (!rcon!.authenticated) {
+            await rcon!.connect()
           }
-          return result
+          return ret
         },
       },
     })
