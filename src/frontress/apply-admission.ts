@@ -7,12 +7,7 @@ import {
 } from '../database/models/game.model'
 import { errors } from '../errors'
 import { update } from '../games/update'
-import type { RconCommand } from '../shared/types/rcon-command'
-import { Tf2Team } from '../shared/types/tf2-team'
-import { withRcon } from '../games/rcon/with-rcon'
-import { isMatchAddResponseAccepted } from './is-match-add-response-accepted'
 import { assertPlayersAvailable } from './assert-players-available'
-import { waitForFrontressMatch } from '../games/rcon/wait-for-frontress-match'
 
 const applying = new Map<string, Promise<GameModel>>()
 
@@ -40,26 +35,6 @@ async function apply(gameNumber: GameNumber, admissionId: string): Promise<GameM
     { steamId: { $in: steamIds } },
     { $set: { activeGame: game.number } },
   )
-
-  const roster = admission.slots
-    .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
-    .join(',')
-  const command = `tf_mm_match_add "${game.frontress!.externalMatchId}" "${roster}"` as RconCommand
-  const response = await withRcon(game, async ({ rcon }) => {
-    const result = await rcon.send(command)
-    if (isMatchAddResponseAccepted(result, game.frontress!.externalMatchId)) {
-      await waitForFrontressMatch({
-        rcon,
-        matchId: game.frontress!.externalMatchId,
-        map: game.map,
-        roster,
-      })
-    }
-    return result
-  })
-  if (!isMatchAddResponseAccepted(response, game.frontress!.externalMatchId)) {
-    throw errors.badGateway('game server did not acknowledge tf_mm_match_add')
-  }
 
   try {
     return await update(

@@ -27,8 +27,6 @@ import type { ReservationId } from '@tf2pickup-org/serveme-tf-client'
 import { errors } from '../../errors'
 import { players } from '../../players'
 import type { RconCommand } from '../../shared/types/rcon-command'
-import { Tf2Team } from '../../shared/types/tf2-team'
-import { waitForFrontressMatch } from './wait-for-frontress-match'
 
 const configurators = new Map<GameNumber, AbortController>()
 const configureRetries = 2
@@ -167,7 +165,9 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
     throw new Error(`${signal.reason}`)
   }
 
-  const password = generateGameserverPassword()
+  // Frontress admission is enforced by the GC lobby/strict roster. A shared
+  // password is both redundant and a second, stale source of admission state.
+  const password = game.kind === GameKind.frontress ? '' : generateGameserverPassword()
 
   return await withRcon(game, async ({ rcon }) => {
     let logSecret: string
@@ -205,29 +205,12 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
 
     for await (const line of compileConfig(game, password)) {
       logger.debug(line)
-      const response = await rcon.send(line)
+      await rcon.send(line)
       if (line.startsWith('logaddress_add')) {
         await verifyLogTransmission({ rcon, logSecret, gameNumber: game.number, signal })
       }
       if (line.startsWith('changelevel')) {
         await delay(secondsToMilliseconds(10))
-      }
-      if (line.startsWith('tf_mm_match_begin')) {
-        const acknowledged = response
-          .split(/\r?\n/)
-          .map(value => value.trim())
-          .includes(`TFMM_MATCH_BEGIN_OK ${game.frontress!.externalMatchId}`)
-        if (!acknowledged) throw errors.badGateway('game server is incompatible with Frontress')
-
-        await waitForFrontressMatch({
-          rcon,
-          matchId: game.frontress!.externalMatchId,
-          map: game.map,
-          roster: game.slots
-            .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
-            .join(','),
-          signal,
-        })
       }
     }
 
@@ -281,7 +264,7 @@ async function* compileConfig(game: GameModel, password: string): AsyncGenerator
 
   if (game.kind === GameKind.frontress && game.frontress) {
     const spec = game.frontress
-    yield `sv_password ${quote(password)}`
+    yield 'sv_password ""'
     yield `sv_tags ${quote(`tfmm:${spec.externalMatchId}`)}`
     yield `maxplayers ${spec.maxPlayers}`
     yield `tf_match_emulation ${spec.matchEmulation}`
@@ -290,10 +273,9 @@ async function* compileConfig(game: GameModel, password: string): AsyncGenerator
     yield `tf_mm_trusted ${spec.matchEmulation === 0 ? 0 : 1}`
     if (spec.serverConfig) yield `exec ${spec.serverConfig}`
 
-    const roster = game.slots
-      .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
-      .join(',')
-    yield `tf_mm_match_begin ${quote(spec.externalMatchId)} ${spec.matchGroup} ${quote(game.map)} ${quote(spec.serverConfig)} ${quote(password)} ${quote(roster)} ${spec.maxPlayers}`
+    if (game.gameServer?.provider !== GameServerProvider.servemeTf) {
+      yield `changelevel ${game.map}`
+    }
     return
   }
 
