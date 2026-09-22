@@ -35,6 +35,18 @@ The Frontress RCON branch requires explicit `TFMM_MATCH_BEGIN_OK` and
 `TFMM_MATCH_ADD_OK` acknowledgements. An old or incorrectly built game server
 is rejected instead of silently launching without the roster gate.
 
+Frontress games have no server password. `tf_mm_match_begin` publishes the
+lobby that becomes the game server's list of SteamIDs allowed to connect, and
+that roster is the door: a matchmaking server may not hold a password at all,
+because TF2 turns `tf_mm_servermode` off the moment it sees one -- which would
+take the roster gate down with it. `sv_password` is therefore cleared before
+the match begins and players are given a connect string without one.
+
+A password is still generated and passed to `tf_mm_match_begin` as the value
+the game server falls back on if it cannot raise the gate. Nobody is told it,
+so that failure locks the server rather than opening it, and configuration
+fails because the `TFMM_MATCH_BEGIN_OK` acknowledgement does not arrive.
+
 Backfill requests are stored as pending admissions before RCON. Positive ACKs
 atomically materialize their slots; a startup/periodic worker retries pending
 admissions, making response loss and process crashes safe.

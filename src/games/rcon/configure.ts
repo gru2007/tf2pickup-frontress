@@ -166,7 +166,18 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
     throw new Error(`${signal.reason}`)
   }
 
-  const password = generateGameserverPassword()
+  // Frontress games are gated by the server's own roster, not by a password.
+  // tf_mm_match_begin publishes the lobby that becomes the list of SteamIDs
+  // allowed to connect, and a matchmaking server may not hold a password at
+  // all: srcds turns tf_mm_servermode off the moment it sees one, which takes
+  // that gate down again. So players are given no password.
+  //
+  // One is still generated and handed to the game server as the value to fall
+  // back on if the gate cannot be raised. Nobody is ever told it, so a failed
+  // gate locks the server instead of leaving it open to anyone who finds it.
+  const isFrontress = game.kind === GameKind.frontress && game.frontress !== undefined
+  const fallbackPassword = generateGameserverPassword()
+  const password = isFrontress ? '' : fallbackPassword
 
   return await withRcon(game, async ({ rcon }) => {
     let logSecret: string
@@ -202,7 +213,7 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
       },
     )
 
-    for await (const line of compileConfig(game, password)) {
+    for await (const line of compileConfig(game, password, fallbackPassword)) {
       logger.debug(line)
       const response = await rcon.send(line)
       if (line.startsWith('logaddress_add')) {
@@ -264,13 +275,20 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
 }
 
 // keep in sync with GameServerCommandPreview in src/admin/games/views/html/game-server-command-preview.tsx
-async function* compileConfig(game: GameModel, password: string): AsyncGenerator<RconCommand> {
+async function* compileConfig(
+  game: GameModel,
+  password: string,
+  fallbackPassword: string,
+): AsyncGenerator<RconCommand> {
   yield `logaddress_add ${environment.LOG_RELAY_ADDRESS}:${environment.LOG_RELAY_PORT}`
   yield 'kickall'
 
   if (game.kind === GameKind.frontress && game.frontress) {
     const spec = game.frontress
-    yield `sv_password ${quote(password)}`
+    // Explicitly empty: whatever the server booted with -- serveme writes its
+    // reservation password into the config every map load execs -- has to be
+    // off before tf_mm_match_begin, or the roster gate cannot come up.
+    yield `sv_password ""`
     yield `sv_tags ${quote(`tfmm:${spec.externalMatchId}`)}`
     yield `maxplayers ${spec.maxPlayers}`
     yield `tf_match_emulation ${spec.matchEmulation}`
@@ -282,7 +300,7 @@ async function* compileConfig(game: GameModel, password: string): AsyncGenerator
     const roster = game.slots
       .map(slot => `${slot.player}:${slot.team === Tf2Team.red ? 2 : 3}`)
       .join(',')
-    yield `tf_mm_match_begin ${quote(spec.externalMatchId)} ${spec.matchGroup} ${quote(game.map)} ${quote(spec.serverConfig)} ${quote(password)} ${quote(roster)} ${spec.maxPlayers}`
+    yield `tf_mm_match_begin ${quote(spec.externalMatchId)} ${spec.matchGroup} ${quote(game.map)} ${quote(spec.serverConfig)} ${quote(fallbackPassword)} ${quote(roster)} ${spec.maxPlayers}`
     return
   }
 
