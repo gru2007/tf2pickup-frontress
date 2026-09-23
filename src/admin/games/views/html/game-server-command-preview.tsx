@@ -15,6 +15,43 @@ export function GameServerCommandPreview(props: {
         {Html.escapeHtml(`${environment.LOG_RELAY_ADDRESS}:${environment.LOG_RELAY_PORT}`)}
       </span>
       <span>kickall</span>
+      <span class="text-abru-light-75/60 mt-2 italic">
+        {'// Frontress games stop here and take the roster-gate branch instead:'}
+      </span>
+      <span>
+        sv_password &quot;&quot;{' '}
+        <Comment text="a matchmaking server may not hold one - the roster is the gate" />
+      </span>
+      <span>
+        sv_tags &quot;tfmm:
+        <Placeholder text="external match id" />
+        &quot;
+      </span>
+      <span>
+        maxplayers <Placeholder text="max players" />
+      </span>
+      <span>
+        tf_match_emulation <Placeholder text="0, 1 or 2" />
+      </span>
+      <span>tf_match_emulation_restartmatch 0</span>
+      <span>tf_match_emulation_randommap 0</span>
+      <span>
+        tf_mm_trusted <Placeholder text="0 or 1" />
+      </span>
+      <span>
+        exec <Placeholder text="ruleset" />{' '}
+        <Comment text="only if the match specifies a server config" />
+      </span>
+      <span>
+        tf_mm_match_begin <Placeholder text="match id" /> <Placeholder text="match group" />{' '}
+        <Placeholder text="map" /> <Placeholder text="ruleset" />{' '}
+        <Placeholder text="fallback password" /> <Placeholder text="roster" />{' '}
+        <Placeholder text="max players" />{' '}
+        <Comment text="changes the map itself; must answer TFMM_MATCH_BEGIN_OK" />
+      </span>
+      <span class="text-abru-light-75/60 mt-2 italic">
+        {'// Everything below is the pickup branch:'}
+      </span>
       <span>
         changelevel <Placeholder text="map" />{' '}
         <Comment text="skipped on serveme.tf servers - they start with the right map" />
