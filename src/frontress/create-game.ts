@@ -120,7 +120,8 @@ function assertSameGame(game: GameModel, input: CreateGame): void {
     game.kind !== GameKind.frontress ||
     game.map !== input.map ||
     game.frontress?.matchGroup !== input.matchGroup ||
-    (game.frontress.matchMode !== undefined && game.frontress.matchMode !== effectiveMatchMode(input)) ||
+    (game.frontress.matchMode !== undefined &&
+      game.frontress.matchMode !== effectiveMatchMode(input)) ||
     game.frontress.maxPlayers !== input.maxPlayers ||
     game.frontress.serverConfig !== input.serverConfig ||
     game.frontress.matchEmulation !== input.matchEmulation ||
