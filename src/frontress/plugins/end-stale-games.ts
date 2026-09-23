@@ -50,7 +50,15 @@ async function endStaleGames(): Promise<void> {
         await forceEnd(game.number, 'bot')
         continue
       }
-      if (game.state === GameState.started && isIdle(game, now)) {
+      // launching counts, not just started. A Frontress game reaches launching
+      // the moment the game server acknowledges the match, and only becomes
+      // started when somebody actually joins -- so a match whose players never
+      // arrived, because the server turned them away or because its serveme
+      // reservation died under it, sits in launching. Leaving that to the
+      // FRONTRESS_MAX_MATCH_SECONDS cap pins every one of its players'
+      // activeGame for three hours, and the gateway keeps handing them the
+      // connect string of a server that is gone instead of queueing them.
+      if ([GameState.launching, GameState.started].includes(game.state) && isIdle(game, now)) {
         await forceEnd(game.number, 'bot')
       }
     } catch (error: unknown) {
@@ -77,9 +85,17 @@ function isIdle(game: GameModel, now: number): boolean {
       GameEventType.playerLeftGameServer,
     ].includes(event.event),
   )
+
+  // Nobody has ever been on this server, so there is no presence event to
+  // measure from. Measure from the moment the server was declared ready
+  // instead: "the players never arrived" is exactly the case that has to end
+  // here, and requiring a presence event meant it never did.
+  const idleSince =
+    lastPresenceEvent?.at.getTime() ??
+    game.events.findLast(event => event.event === GameEventType.gameServerInitialized)?.at.getTime()
+
   return (
-    lastPresenceEvent !== undefined &&
-    now - lastPresenceEvent.at.getTime() >=
-      secondsToMilliseconds(environment.FRONTRESS_IDLE_END_SECONDS)
+    idleSince !== undefined &&
+    now - idleSince >= secondsToMilliseconds(environment.FRONTRESS_IDLE_END_SECONDS)
   )
 }

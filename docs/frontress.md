@@ -57,9 +57,15 @@ Final SDR addresses are returned to players while RCON continues to use the
 server's real address. Provisional SDR values are ignored until serveme marks
 them final.
 
-`FRONTRESS_IDLE_END_SECONDS` defaults to 300 and ends a started game after its
-server remains empty. `FRONTRESS_MAX_MATCH_SECONDS` defaults to 10800 and caps
-the full game lifecycle so failed reservations cannot leak indefinitely.
+`FRONTRESS_IDLE_END_SECONDS` defaults to 300 and ends a game whose server is
+empty — both a started game everyone has left and a launching game whose
+players never arrived at all. The second case is measured from the moment the
+server was declared ready, because there is no presence event to measure from,
+and it matters: a match nobody could join otherwise held every one of its
+players' `activeGame` until `FRONTRESS_MAX_MATCH_SECONDS`, and the gateway
+answered their queue requests with the connect string of a server that no
+longer existed. `FRONTRESS_MAX_MATCH_SECONDS` defaults to 10800 and caps the
+full game lifecycle so failed reservations cannot leak indefinitely.
 
 Frontress reservations use `externalMatchId` as ServeMe's `match_id`. ServeMe
 returns the existing non-terminal reservation for retries, so one match cannot
