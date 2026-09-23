@@ -51,8 +51,12 @@ export async function ensureMatchReservation(
         ends_at: add(startsAt, { hours: 3 }).toISOString(),
         password,
         rcon,
-        enable_plugins: true,
-        enable_demos_tf: true,
+        // Both off: the Frontress fork of serveme ships no SourceMod and no
+        // demos.tf, so asking for them only made its start_reservation job
+        // try to scp sourcemod.vdf into a directory the game server image
+        // does not have.
+        enable_plugins: false,
+        enable_demos_tf: false,
         first_map: game.map,
         match_id: matchId,
         match_mode: matchMode,
