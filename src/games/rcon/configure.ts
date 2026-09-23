@@ -180,19 +180,26 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
   const password = isFrontress ? '' : fallbackPassword
 
   return await withRcon(game, async ({ rcon }) => {
-    let logSecret: string
-    if (!game.gameServer!.logSecret) {
-      logSecret = generate({
+    // Send it even when the reservation already told us one.
+    //
+    // verifyLogTransmission below only accepts a log line whose password
+    // equals this secret, so the secret we hold and the secret the game server
+    // is stamping its lines with have to be the same *now*. For a serveme
+    // reservation the address carries a logSecret, but the server does not get
+    // it from the reservation -- serveme pushes it over RCON from a Sidekiq
+    // job, seconds later and on its own schedule. Trusting that it had already
+    // landed is what made configuration fail its first two attempts and
+    // succeed on the third, which is the last one configureRetries allows.
+    const logSecret =
+      game.gameServer!.logSecret ??
+      generate({
         length: 16,
         numbers: true,
         symbols: false,
         lowercase: false,
         uppercase: false,
       })
-      await rcon.send(`sv_logsecret ${logSecret}`)
-    } else {
-      logSecret = game.gameServer!.logSecret
-    }
+    await rcon.send(`sv_logsecret ${logSecret}`)
 
     if (signal?.aborted) {
       throw new Error(`${signal.reason}`)
