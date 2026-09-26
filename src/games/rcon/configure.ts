@@ -28,6 +28,7 @@ import { errors } from '../../errors'
 import { players } from '../../players'
 import type { RconCommand } from '../../shared/types/rcon-command'
 import { Tf2Team } from '../../shared/types/tf2-team'
+import { isInitialMatchReady } from '../../frontress/is-initial-match-ready'
 
 const configurators = new Map<GameNumber, AbortController>()
 const configureRetries = 2
@@ -235,6 +236,27 @@ async function doConfigure(game: GameModel, options: { signal?: AbortSignal } = 
           .map(value => value.trim())
           .includes(`TFMM_MATCH_BEGIN_OK ${game.frontress!.externalMatchId}`)
         if (!acknowledged) throw errors.badGateway('game server is incompatible with Frontress')
+
+        // BEGIN_OK only confirms that the custom command published a lobby.
+        // The strict join gate in CTFGCServerSystem checks CMatchInfo, which
+        // may not exist yet. Do not hand players an address and mark the game
+        // launching until the game's own RCON status confirms a matching lobby
+        // AND a constructed match with the entire initial roster.
+        let ready = false
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (signal?.aborted) throw new Error(`${signal.reason}`)
+          const status = await rcon.send('tf_mm_server_status')
+          if (isInitialMatchReady(status, game.frontress!.externalMatchId, game.slots.length)) {
+            ready = true
+            break
+          }
+          await delay(secondsToMilliseconds(1))
+        }
+        if (!ready) {
+          throw new Error(
+            `Frontress match ${game.frontress!.externalMatchId} was acknowledged but SRCDS did not build CMatchInfo with ${game.slots.length} seats`,
+          )
+        }
       }
     }
 
