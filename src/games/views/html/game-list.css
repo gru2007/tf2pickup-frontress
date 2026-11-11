@@ -97,6 +97,10 @@
         order: 0;
       }
 
+      &[data-kind='war'] .game-number {
+        color: var(--color-alert);
+      }
+
       .game-number {
         order: 1;
 

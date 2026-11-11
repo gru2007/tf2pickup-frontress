@@ -9,6 +9,7 @@ import { makeTitle } from '../../../html/make-title'
 import { AdminToolbox } from './admin-toolbox'
 import { requestContext } from '@fastify/request-context'
 import type { GcMatch } from '../../../gc/schemas'
+import { matchTitle } from '../../match-title'
 import { PlayerRole } from '../../../auth/player-role'
 import { GameResults } from './game-results'
 import { getPlayerSummaries } from '../../../steam/get-player-summaries'
@@ -41,7 +42,7 @@ export async function GamePage(props: { game: GcMatch }) {
 }
 
 function gameDescription(game: GcMatch) {
-  const parts = [game.group_name, game.map]
+  const parts = [matchTitle(game), game.map]
   if (game.result) {
     parts.push(`RED ${game.result.red_score} : ${game.result.blue_score} BLU`)
   } else {

@@ -1,7 +1,11 @@
 import { format, formatDuration, intervalToDuration } from 'date-fns'
 import type { GcMatch } from '../../../gc/schemas'
 import { MapThumbnail } from '../../../html/components/map-thumbnail'
+import { matchKind } from '../../match-kind'
+import { matchTitle } from '../../match-title'
 import { GameStateIndicator } from './game-state-indicator'
+
+const kindNames = { casual: 'casual', ranked: 'ranked', war: 'war battle' } as const
 
 export function GameSummary(props: { game: GcMatch }) {
   const { game } = props
@@ -17,8 +21,11 @@ export function GameSummary(props: { game: GcMatch }) {
           <MapThumbnail map={game.map} />
         </div>
 
-        <div class="game-floating-label text-abru-light-75 top-[10px] left-[10px]">
-          <span safe>{game.group_name}</span>
+        <div
+          class="game-floating-label text-abru-light-75 top-[10px] left-[10px]"
+          data-kind={matchKind(game)}
+        >
+          <span safe>{matchTitle(game)}</span>
         </div>
 
         <GameStateIndicator game={game} />
@@ -32,6 +39,13 @@ export function GameSummary(props: { game: GcMatch }) {
       </div>
 
       <div class="bg-abru-dark-29 flex flex-col gap-[8px] p-[10px]">
+        <div class="game-info">
+          <span class="game-info-label">mode</span>
+          <span class="game-info-value" safe>
+            {kindNames[matchKind(game)]}
+          </span>
+        </div>
+
         <div class="game-info">
           <span class="game-info-label">launched</span>
           <span class="game-info-value" safe>

@@ -388,6 +388,10 @@
       &:empty {
         display: none;
       }
+
+      &[data-kind='war'] {
+        color: var(--color-alert);
+      }
     }
   }
 

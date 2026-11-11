@@ -4,6 +4,8 @@ import { GameClassIcon } from '../../../html/components/game-class-icon'
 import { GameLiveIndicator } from '../../../html/components/game-live-indicator'
 import { MapThumbnail } from '../../../html/components/map-thumbnail'
 import type { Tf2ClassName } from '../../../shared/types/tf2-class-name'
+import { matchKind } from '../../match-kind'
+import { matchTitle } from '../../match-title'
 
 export function GameListItem(props: { game: GcMatch; classPlayed?: Tf2ClassName | undefined }) {
   const isRunning = props.game.state !== 'ended'
@@ -36,10 +38,15 @@ export function GameListItem(props: { game: GcMatch; classPlayed?: Tf2ClassName 
   }
 
   return (
-    <a class="game-list-item" href={`/games/${props.game.match_id}`} preload="mousedown">
+    <a
+      class="game-list-item"
+      href={`/games/${props.game.match_id}`}
+      preload="mousedown"
+      data-kind={matchKind(props.game)}
+    >
       <div class="live-indicator">{isRunning ? <GameLiveIndicator /> : <></>}</div>
       <span class={['game-number', isRunning && 'text-accent', 'tabular-nums']} safe>
-        {props.game.group_name}
+        {matchTitle(props.game)}
       </span>
       <span class="map-name" safe>
         {props.game.map}

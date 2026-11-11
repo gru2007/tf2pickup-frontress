@@ -25,7 +25,11 @@ export async function GamesPage() {
                   </a>
                 </AdminCell>
                 <AdminCell>
-                  <span safe>{match.group_name}</span>
+                  <span safe>
+                    {match.kind === 'war'
+                      ? `war · ${match.sector ?? match.group_name}`
+                      : match.group_name}
+                  </span>
                 </AdminCell>
                 <AdminCell>
                   <span safe>{match.map}</span>
