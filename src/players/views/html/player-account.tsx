@@ -7,16 +7,26 @@ import type { SteamId64 } from '../../../shared/types/steam-id-64'
 
 type Quest = z.infer<typeof gcSchemas.quests>['daily'][number]
 
+// "In one match" quests (per) count matches where the player reached per.
+const onePer = (q: Quest, what: string) =>
+  q.target > 1 ? `${q.target} times get ${q.per} ${what} in one match` : `Get ${q.per} ${what} in one match`
+
 const questText: Record<string, (q: Quest) => string> = {
-  kills: q => `Get ${q.target} kills`,
-  damage: q => `Deal ${q.target} damage`,
-  healing: q => `Heal ${q.target} health`,
+  kills: q => (q.per ? onePer(q, 'kills') : `Get ${q.target} kills`),
+  damage: q => (q.per ? onePer(q, 'damage') : `Deal ${q.target} damage`),
+  healing: q => (q.per ? onePer(q, 'healing') : `Heal ${q.target} health`),
   support: q => `Earn ${q.target} support points`,
-  score: q => `Score ${q.target} points`,
+  score: q => (q.per ? onePer(q, 'points') : `Score ${q.target} points`),
   wins: q => `Win ${q.target} matches`,
   matches: q => `Finish ${q.target} matches`,
   war_wins: q => `Win ${q.target} war battles`,
-  class_wins: q => `Win a match as ${q.class ?? 'any class'}`,
+  class_wins: q => `Win ${q.target > 1 ? `${q.target} matches` : 'a match'} as ${q.class ?? 'any class'}`,
+  class_play: q => `Play a match as ${q.class ?? 'any class'}`,
+  medals: q => `Earn ${q.target} medals`,
+  gold_medals: q => `Earn ${q.target} gold medal${q.target > 1 ? 's' : ''}`,
+  party_wins: q => `Win ${q.target} matches with your party`,
+  positive_kd: q => `Finish ${q.target} matches with more kills than deaths`,
+  clan_matches: q => `Play ${q.target} matches with a clanmate`,
 }
 
 // The private part of the player's own profile: what the coordinator knows

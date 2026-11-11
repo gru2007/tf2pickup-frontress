@@ -144,6 +144,7 @@ const quest = z.object({
   id: z.string(),
   kind: z.string(),
   class: z.string().optional(),
+  per: z.number().optional(),
   target: z.number(),
   xp: z.number(),
   weekly: z.boolean(),
