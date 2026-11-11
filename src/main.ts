@@ -1,10 +1,7 @@
-import './otel'
-import './migrate'
 import fastify from 'fastify'
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 import { resolve } from 'node:path'
 import { logger, logger as loggerInstance } from './logger'
-import { secrets } from './secrets'
 import { environment } from './environment'
 import { version } from './version'
 import proxyAddr from '@fastify/proxy-addr'
@@ -13,7 +10,6 @@ import { logError } from './utils/log-error'
 import { ErrorPage } from './error-pages/views/html/error.page'
 import { secondsInWeek } from 'date-fns/constants'
 import autoload from '@fastify/autoload'
-import { isTestAuthSecret } from './auth/is-test-auth-secret'
 
 const trustProxy = compileTrustProxy(environment.TRUST_PROXY)
 
@@ -29,23 +25,9 @@ const app = fastify({
 app.setSerializerCompiler(serializerCompiler)
 app.setValidatorCompiler(validatorCompiler)
 
-logger.info(`starting tf2pickup.org ${version}`)
+logger.info(`starting ${environment.WEBSITE_NAME} portal ${version}`)
 
-if (!environment.CI) {
-  await app.register(await import('@fastify/rate-limit'), {
-    // /auth/test hands the AI playground's bots and agents a cookie with the test auth secret
-    allowList: environment.TEST_AUTH_SECRET
-      ? req => {
-          const value = req.headers.cookie?.match(/(?:^|;\s*)test-auth-secret=([^;]*)/)?.[1]
-          try {
-            return isTestAuthSecret(value && decodeURIComponent(value))
-          } catch {
-            return false
-          }
-        }
-      : [],
-  })
-}
+await app.register(await import('@fastify/rate-limit'))
 
 await app.register(await import('@fastify/helmet'), {
   contentSecurityPolicy:
@@ -53,53 +35,29 @@ await app.register(await import('@fastify/helmet'), {
       ? {
           directives: {
             'script-src': ["'self'"],
-            'script-src-elem': [
-              "'self'",
-              "'unsafe-inline'",
-              ...(environment.UMAMI_SCRIPT_SRC
-                ? [new URL(environment.UMAMI_SCRIPT_SRC).origin]
-                : []),
-              ...(environment.UMAMI_RECORDER_SCRIPT_SRC
-                ? [new URL(environment.UMAMI_RECORDER_SCRIPT_SRC).origin]
-                : []),
-            ],
+            'script-src-elem': ["'self'", "'unsafe-inline'"],
             'script-src-attr': ["'unsafe-inline'"],
             'img-src': [
               "'self'",
-              'https://mapthumbnails.tf2pickup.org',
+              new URL(environment.THUMBNAIL_SERVICE_URL).origin,
               'https://steamcdn-a.akamaihd.net',
               'https://avatars.akamai.steamstatic.com',
               'https://avatars.steamstatic.com',
-              'https://static-cdn.jtvnw.net',
-              'https://cdn.discordapp.com',
             ],
-            'connect-src': [
-              "'self'",
-              ...(environment.UMAMI_SCRIPT_SRC
-                ? [new URL(environment.UMAMI_SCRIPT_SRC).origin]
-                : []),
-              ...(environment.UMAMI_RECORDER_SCRIPT_SRC
-                ? [new URL(environment.UMAMI_RECORDER_SCRIPT_SRC).origin]
-                : []),
-            ],
+            'connect-src': ["'self'"],
           },
         }
       : false,
 })
 await app.register(await import('@fastify/sensible'))
 await app.register(await import('@fastify/static'), {
-  root: [
-    ...(environment.WEBSITE_BRANDING
-      ? [resolve(import.meta.dirname, '..', 'public', 'branding', environment.WEBSITE_BRANDING)]
-      : []),
-    resolve(import.meta.dirname, '..', 'public'),
-  ],
+  root: resolve(import.meta.dirname, '..', 'public'),
   prefix: '/',
 })
 await app.register(await import('@fastify/formbody'))
-await app.register(await import('@fastify/multipart'))
 await app.register(await import('@fastify/secure-session'), {
-  key: await secrets.get('session'),
+  secret: environment.SESSION_SECRET,
+  salt: 'frontress-portal',
   expiry: secondsInWeek, // 1 week
   cookie: {
     path: '/',
@@ -134,6 +92,12 @@ app.setErrorHandler((error, request, reply) => {
 
   logError(error)
 
+  // htmx actions show the message in a flash message (see @client/error-message.ts);
+  // boosted page loads still get the error page
+  if (request.headers['hx-request'] === 'true' && request.headers['hx-boosted'] !== 'true') {
+    return reply.type('text/plain; charset=utf-8').code(statusCode).send(message)
+  }
+
   const accept = request.accepts()
   switch (accept.type(['json', 'html'])) {
     case 'json':
@@ -156,8 +120,6 @@ app.setNotFoundHandler(async (request, reply) => {
       return reply.code(406).send('Not Acceptable')
   }
 })
-
-await app.register((await import('./websocket')).default)
 
 await app.register(autoload, {
   dir: resolve(import.meta.dirname, '.'),

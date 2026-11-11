@@ -1,35 +1,28 @@
-import { type GameModel, GameState } from '../../../database/models/game.model'
+import type { GcMatch } from '../../../gc/schemas'
 import { GameLiveIndicator } from '../../../html/components/game-live-indicator'
 import { IconX } from '../../../html/components/icons'
 
-export function GameStateIndicator(props: { game: Pick<GameModel, 'state' | 'number'> }) {
-  const gameIsLive = [
-    GameState.created,
-    GameState.configuring,
-    GameState.launching,
-    GameState.started,
-  ].includes(props.game.state)
-
+export function GameStateIndicator(props: { game: GcMatch }) {
   let indicator = <></>
-  if (gameIsLive) {
+  if (props.game.state !== 'ended') {
     indicator = (
       <>
         <GameLiveIndicator />
-        <span class="uppercase">live</span>
+        <span class="uppercase">{props.game.state === 'setup' ? 'launching' : 'live'}</span>
       </>
     )
-  } else if (props.game.state === GameState.interrupted) {
+  } else if (!props.game.result) {
     indicator = (
       <>
         <IconX size={18} />
-        <span class="text-sm leading-none font-bold">force-ended</span>
+        <span class="text-sm leading-none font-bold">no result</span>
       </>
     )
   }
 
   return (
     <div
-      id={`game-${props.game.number}-state`}
+      id={`game-${props.game.match_id}-state`}
       class="game-floating-label text-accent-600 top-[10px] right-[10px]"
       aria-label="Game status"
     >

@@ -1,19 +1,14 @@
-import { collections } from '../../../database/collections'
 import { Layout } from '../../../html/layout'
 import { NavigationBar } from '../../../html/components/navigation-bar'
-import { PlayerRole, type PlayerModel } from '../../../database/models/player.model'
-import { playerAvatarUrl } from '../../../shared/player-avatar-url'
 import { format } from 'date-fns'
-import { Tf2ClassName } from '../../../shared/types/tf2-class-name'
-import { queue } from '../../../queue-auto'
-import { GameClassIcon } from '../../../html/components/game-class-icon'
 import {
-  IconAlignBoxBottomRight,
+  IconAwardFilled,
   IconBrandSteam,
-  IconBrandTwitch,
-  IconClover,
+  IconCheck,
+  IconCrown,
   IconStars,
   IconSum,
+  IconX,
 } from '../../../html/components/icons'
 import { resolve } from 'node:path'
 import { Page } from '../../../html/components/page'
@@ -24,55 +19,45 @@ import { makeTitle } from '../../../html/make-title'
 import { environment } from '../../../environment'
 import { AdminToolbox } from './admin-toolbox'
 import type { SteamId64 } from '../../../shared/types/steam-id-64'
-import type { PickDeep } from 'type-fest'
-import type { GameModel } from '../../../database/models/game.model'
 import { requestContext } from '@fastify/request-context'
+import { gc } from '../../../gc'
+import type { GcPlayer } from '../../../gc/schemas'
+import { PlayerRole } from '../../../auth/player-role'
+import { rolesOf } from '../../../auth/roles-of'
+import { getPlayerSummaries } from '../../../steam/get-player-summaries'
+import { playerAvatarUrl } from '../../../shared/player-avatar-url'
+import { classesPlayed } from '../../../games/classes-played'
+import { PlayerAccount } from './player-account'
+import { firstNonEmpty } from '../../../utils/first-non-empty'
 
 const gamesPerPage = 5
 
-export type PlayerPageData = PickDeep<
-  PlayerModel,
-  | 'steamId'
-  | 'name'
-  | 'joinedAt'
-  | 'roles'
-  | 'etf2lProfile'
-  | 'twitchTvProfile'
-  | 'avatar.large'
-  | 'stats'
-  | 'skill'
-  | 'skillHistory'
-  | 'verified'
-  | 'bans'
-  | 'elo'
->
-
-export async function PlayerPage(props: { player: PlayerPageData; page: number }) {
+export async function PlayerPage(props: { player: GcPlayer; page: number }) {
   const { player } = props
+  const steamId = player.steam_id as SteamId64
   const user = requestContext.get('user')
+  const summary = (await getPlayerSummaries([steamId])).get(steamId)
+  const name = firstNonEmpty(summary?.name, player.name) ?? steamId
+  const isMe = user?.player.steamId === steamId
+  const isAdmin = user?.player.roles.includes(PlayerRole.admin) ?? false
 
   return (
     <Layout
-      title={makeTitle(player.name)}
-      description={`${player.name} · ${player.stats.totalGames} games played on ${environment.WEBSITE_NAME} · member since ${format(player.joinedAt, 'MMMM yyyy')}`}
-      image={`/players/${player.steamId}/og-image.png`}
-      canonical={`/players/${player.steamId}`}
+      title={makeTitle(name)}
+      description={`${name} · level ${player.level} · ${player.matches} matches played on ${environment.WEBSITE_NAME}`}
+      canonical={`/players/${steamId}`}
       embedStyle={resolve(import.meta.dirname, 'style.css')}
     >
       <NavigationBar />
       <Page>
         <div class="relative container mx-auto flex flex-col gap-[30px]">
-          <PlayerPresentation
-            player={player}
-            gameCount={player.stats.totalGames}
-            gameCountOnClasses={player.stats.gamesByClass}
-            isAdmin={user?.player.roles.includes(PlayerRole.admin) ?? false}
-          />
+          <PlayerPresentation player={player} name={name} avatar={summary?.avatar.large} />
 
-          {user?.player.roles.includes(PlayerRole.admin) && <AdminToolbox player={player} />}
+          {isMe && gc.adminEnabled() && <PlayerAccount steamId={steamId} />}
+          {isAdmin && gc.adminEnabled() && <AdminToolbox steamId={steamId} />}
 
           <div id="gameList" class="contents">
-            <PlayerGameList steamId={player.steamId} page={props.page} />
+            <PlayerGameList steamId={steamId} page={props.page} />
           </div>
         </div>
       </Page>
@@ -82,31 +67,13 @@ export async function PlayerPage(props: { player: PlayerPageData; page: number }
 }
 
 export async function PlayerGameList(props: { steamId: SteamId64; page: number }) {
-  const skip = (props.page - 1) * gamesPerPage
-  const games = await collections.games
-    .find<PickDeep<GameModel, 'number' | 'state' | 'events.0' | 'score' | 'map' | 'slots'>>(
-      { 'slots.player': props.steamId },
-      {
-        limit: gamesPerPage,
-        skip,
-        sort: { 'events.0.at': -1 },
-        projection: {
-          number: 1,
-          state: 1,
-          events: { $slice: 1 },
-          score: 1,
-          map: 1,
-          slots: 1,
-        },
-      },
-    )
-    .toArray()
-
-  const { last, around } = paginate(
-    props.page,
-    gamesPerPage,
-    await collections.games.countDocuments({ 'slots.player': props.steamId }),
-  )
+  const result = await gc.matches({
+    steamId: props.steamId,
+    offset: (props.page - 1) * gamesPerPage,
+    limit: gamesPerPage,
+  })
+  const games = result.matches ?? []
+  const { last, around } = paginate(props.page, gamesPerPage, result.total)
 
   return games.length > 0 ? (
     <>
@@ -117,7 +84,11 @@ export async function PlayerGameList(props: { steamId: SteamId64; page: number }
         {games.map(game => (
           <GameListItem
             game={game}
-            classPlayed={game.slots.find(s => s.player === props.steamId)!.gameClass}
+            classPlayed={
+              classesPlayed(
+                game.result?.players?.find(p => p.steam_id === props.steamId)?.classes_played,
+              )[0]
+            }
           />
         ))}
       </div>
@@ -135,56 +106,61 @@ export async function PlayerGameList(props: { steamId: SteamId64; page: number }
   )
 }
 
-function PlayerPresentation(props: {
-  player: PickDeep<
-    PlayerModel,
-    | 'avatar.large'
-    | 'name'
-    | 'roles'
-    | 'joinedAt'
-    | 'etf2lProfile'
-    | 'twitchTvProfile'
-    | 'steamId'
-    | 'skill'
-  >
-  gameCount: number
-  gameCountOnClasses: Partial<Record<Tf2ClassName, number>>
-  isAdmin: boolean
-}) {
+function PlayerPresentation(props: { player: GcPlayer; name: string; avatar: string | undefined }) {
+  const { player } = props
+  const roles = rolesOf(player.steam_id as SteamId64)
+  const levelProgress =
+    player.level_xp_total > 0 ? Math.round((player.level_xp / player.level_xp_total) * 100) : 0
   return (
     <div class="player-presentation">
       <img
-        src={playerAvatarUrl(props.player.avatar, 'large')}
+        src={playerAvatarUrl(props.avatar ? { large: props.avatar } : undefined, 'large')}
         width="184"
         height="184"
         class="player-avatar"
-        alt={`${props.player.name}'s avatar`}
+        alt={`${props.name}'s avatar`}
         fetchpriority="high"
       />
 
-      <div class="flex flex-row items-center gap-[10px]">
+      <div class="flex flex-row flex-wrap items-center gap-[10px]">
+        {player.clan && (
+          <a
+            href={`/players?q=${encodeURIComponent(player.clan.tag)}`}
+            class="text-[32px] leading-none font-bold"
+            style={player.clan.color ? `color: ${player.clan.color}` : undefined}
+            title={player.clan.name}
+            safe
+          >
+            [{player.clan.tag}]
+          </a>
+        )}
         <span class="-mt-[6px] text-[48px] leading-none font-bold" safe>
-          {props.player.name}
+          {props.name}
         </span>
-        {props.player.roles.includes(PlayerRole.admin) ? (
+        {roles.includes(PlayerRole.admin) ? (
           <span class="bg-alert text-abru-light-3 rounded-[3px] px-[8px] py-[6px] leading-none font-bold">
             admin
           </span>
         ) : (
           <></>
         )}
-        {props.isAdmin && props.player.skill === undefined && (
-          <span class="flex items-center gap-1 rounded-[3px] bg-green-700 px-[8px] py-[6px] leading-none font-bold text-white">
-            <IconClover size={14} />
-            fresh
+        {player.war_side && (
+          <span
+            class={[
+              'rounded-[3px] px-[8px] py-[6px] leading-none font-bold text-white uppercase',
+              player.war_side === 'blu' ? 'bg-team-blu' : 'bg-team-red',
+            ]}
+            safe
+          >
+            {player.war_side}
           </span>
         )}
       </div>
 
       <div class="flex-col md:justify-self-end">
-        <div class="text-center text-base font-light md:text-start">Joined:</div>
+        <div class="text-center text-base font-light md:text-start">Last match:</div>
         <div class="text-2xl font-bold" safe>
-          {format(props.player.joinedAt, 'MMMM dd, yyyy')}
+          {player.last_match ? format(player.last_match, 'MMMM dd, yyyy') : 'never'}
         </div>
       </div>
 
@@ -192,79 +168,44 @@ function PlayerPresentation(props: {
         <span class="md:hidden">
           <IconSum size={32} />
         </span>
-        <span class="hidden text-base font-light md:inline">Total games played:</span>
-        <span class="justify-self-start text-2xl font-bold">{props.gameCount}</span>
+        <span class="hidden text-base font-light md:inline">Matches:</span>
+        <span class="justify-self-start text-2xl font-bold">{player.matches}</span>
 
         <div class="bg-abru-light-15 row-span-2 mx-2 hidden h-[48px] w-[2px] self-center md:block"></div>
 
-        {queue.config.classes.map(({ name: gameClass }) => (
-          <>
-            <GameClassIcon gameClass={gameClass} size={32} />
-            <span class="text-2xl font-bold">{props.gameCountOnClasses[gameClass] ?? 0}</span>
-          </>
-        ))}
+        <IconCheck size={32} class="text-game-result-win" />
+        <span class="text-2xl font-bold">{player.wins}</span>
+        <IconX size={32} class="text-game-result-loss" />
+        <span class="text-2xl font-bold">{player.losses}</span>
+
+        <div class="bg-abru-light-15 row-span-2 mx-2 hidden h-[48px] w-[2px] self-center md:block"></div>
+
+        <IconCrown size={32} />
+        <span class="text-2xl font-bold" title={`${player.level_xp}/${player.level_xp_total} XP`}>
+          {player.level}
+        </span>
+        <IconAwardFilled size={32} />
+        <span class="text-2xl font-bold" title={`${levelProgress}% to the next level`}>
+          {player.xp}
+        </span>
       </div>
 
       <div class="grid gap-[10px] md:grid-flow-col md:grid-rows-1 md:justify-items-center md:max-xl:col-span-3 lg:place-content-end">
         <a
-          href={`https://steamcommunity.com/profiles/${props.player.steamId}`}
+          href={`https://steamcommunity.com/profiles/${player.steam_id}`}
           target="_blank"
           rel="noreferrer"
-          class={['player-presentation-link', queue.config.classes.length > 4 && 'compact']}
+          class="player-presentation-link"
           title="Steam"
-          data-umami-event="open-external-profile"
-          data-umami-event-target="steam"
         >
           <IconBrandSteam />
           <span>steam</span>
         </a>
 
-        <a
-          href={`https://logs.tf/profile/${props.player.steamId}`}
-          target="_blank"
-          rel="noreferrer"
-          class={['player-presentation-link', queue.config.classes.length > 4 && 'compact']}
-          title="Logs"
-          data-umami-event="open-external-profile"
-          data-umami-event-target="logs"
-        >
-          <IconAlignBoxBottomRight />
-          <span>logs</span>
+        <a href="/hall-of-fame" class="player-presentation-link" title="Hall of fame">
+          <IconStars />
+          <span>{`level ${player.level}`}</span>
         </a>
-
-        {props.player.etf2lProfile ? (
-          <a
-            href={`https://etf2l.org/forum/user/${props.player.etf2lProfile.id}`}
-            target="_blank"
-            rel="noreferrer"
-            class={['player-presentation-link', queue.config.classes.length > 4 && 'compact']}
-            title="ETF2L"
-            data-umami-event="open-external-profile"
-            data-umami-event-target="etf2l"
-          >
-            <IconStars />
-            <span>etf2l</span>
-          </a>
-        ) : (
-          <></>
-        )}
-
-        {props.player.twitchTvProfile ? (
-          <a
-            href={`https://www.twitch.tv/${props.player.twitchTvProfile.login}/`}
-            target="_blank"
-            rel="noreferrer"
-            class={['player-presentation-link', queue.config.classes.length > 4 && 'compact']}
-            title="Twitch"
-            data-umami-event="open-external-profile"
-            data-umami-event-target="twitch"
-          >
-            <IconBrandTwitch />
-            <span>twitch</span>
-          </a>
-        ) : (
-          <></>
-        )}
       </div>
     </div>
   )

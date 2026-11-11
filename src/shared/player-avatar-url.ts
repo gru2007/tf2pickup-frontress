@@ -1,9 +1,8 @@
-import type { PlayerAvatar } from '../database/models/player.model'
 import { defaultPlayerAvatar } from './default-player-avatar'
 
 export function playerAvatarUrl(
-  avatar: Partial<PlayerAvatar> | undefined,
-  size: keyof PlayerAvatar,
+  avatar: Partial<typeof defaultPlayerAvatar> | undefined,
+  size: keyof typeof defaultPlayerAvatar,
 ): string {
   return avatar?.[size] ?? defaultPlayerAvatar[size]
 }

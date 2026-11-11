@@ -1,6 +1,5 @@
 import type { FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
-import type { Jsonifiable } from 'type-fest'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,7 +9,7 @@ declare module 'fastify' {
   }
 
   interface FastifyReply {
-    trigger: (val: Record<string, Jsonifiable>) => this
+    trigger: (val: Record<string, unknown>) => this
   }
 }
 

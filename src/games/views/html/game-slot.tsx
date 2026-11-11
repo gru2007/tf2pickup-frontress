@@ -1,190 +1,52 @@
-import { camelCase } from 'es-toolkit'
-import { collections } from '../../../database/collections'
-import { SlotStatus, type GameSlotModel } from '../../../database/models/game-slot.model'
-import { GameState, type GameModel, type GameNumber } from '../../../database/models/game.model'
-import { PlayerRole, type PlayerModel } from '../../../database/models/player.model'
+import type { z } from 'zod'
+import type { gcSchemas } from '../../../gc/schemas'
 import { GameClassIcon } from '../../../html/components/game-class-icon'
-import { IconPlus, IconReplaceFilled } from '../../../html/components/icons'
-import type { SteamId64 } from '../../../shared/types/steam-id-64'
-import { PlayerConnectionStatusIndicator } from './player-connection-status-indicator'
-import { errors } from '../../../errors'
-import { hasActiveBan } from '../../../players/has-active-ban'
-import type { PickDeep } from 'type-fest'
+import type { PlayerSummary } from '../../../steam/get-player-summaries'
 import { playerAvatarUrl } from '../../../shared/player-avatar-url'
-import { isDeletedUser } from '../../../shared/types/steam-id-64'
-import { DeletedUser } from '../../../html/components/deleted-user'
+import { classesPlayed } from '../../classes-played'
+import { firstNonEmpty } from '../../../utils/first-non-empty'
 
-export async function GameSlot(props: {
-  game: GameModel
-  slot: GameSlotModel
-  actor: SteamId64 | undefined
+type Member = NonNullable<z.infer<typeof gcSchemas.match>['members']>[number]
+type Result = NonNullable<NonNullable<z.infer<typeof gcSchemas.match>['result']>['players']>[number]
+
+export function GameSlot(props: {
+  member: Member
+  result: Result | undefined
+  summary: PlayerSummary | undefined
 }) {
-  if (isDeletedUser(props.slot.player)) {
-    return <DeletedGameSlot slot={props.slot} />
-  }
-
-  const player = await collections.players.findOne<
-    PickDeep<PlayerModel, 'steamId' | 'name' | 'avatar.medium'>
-  >({ steamId: props.slot.player }, { projection: { steamId: 1, name: 1, 'avatar.medium': 1 } })
-  if (!player) {
-    throw errors.internalServerError(`no such player: ${props.slot.player.toString()}`)
-  }
-
+  const name = firstNonEmpty(props.member.name, props.summary?.name) ?? props.member.steam_id
+  const mainClass = classesPlayed(props.result?.classes_played)[0]
   return (
-    <form
-      id={`game-slot-${props.slot.id}`}
-      aria-label={`${player.name}'s slot`}
-      class={[
-        'slot',
-        {
-          [SlotStatus.active]: 'active',
-          [SlotStatus.waitingForSubstitute]: 'waiting-for-substitute',
-        }[props.slot.status],
-      ]}
-      style={`grid-area: ${camelCase(props.slot.id)}`}
-      data-player={player.steamId}
-      data-status={props.slot.status}
+    <div
+      id={`game-slot-${props.member.steam_id}`}
+      aria-label={`${name}'s slot`}
+      class={['slot', props.member.left ? 'left' : 'active']}
+      data-player={props.member.steam_id}
     >
-      <span class="sr-only" safe>
-        {player.name}'s slot
-      </span>
-      <input type="hidden" name="player" value={player.steamId} />
-      <GameSlotContent game={props.game} slot={props.slot} player={player} actor={props.actor} />
-    </form>
-  )
-}
-
-async function GameSlotContent(props: {
-  game: GameModel
-  slot: GameSlotModel
-  player: PickDeep<PlayerModel, 'steamId' | 'name' | 'avatar.medium'>
-  actor: SteamId64 | undefined
-}) {
-  const actor = props.actor
-    ? await collections.players.findOne<
-        Pick<PlayerModel, 'roles' | 'steamId' | 'activeGame' | 'bans'>
-      >({ steamId: props.actor }, { projection: { roles: 1, steamId: 1, activeGame: 1, bans: 1 } })
-    : null
-  const isAdmin = actor?.roles.includes(PlayerRole.admin)
-
-  const showConnectionState = [GameState.launching, GameState.started].includes(props.game.state)
-  const showRequestSubstituteButton =
-    isAdmin &&
-    [GameState.created, GameState.configuring, GameState.launching, GameState.started].includes(
-      props.game.state,
-    )
-
-  switch (props.slot.status) {
-    case SlotStatus.active:
-      return (
-        <>
-          <div class="class-icon">
-            <GameClassIcon gameClass={props.slot.gameClass} size={32} />
-          </div>
-          <img
-            src={playerAvatarUrl(props.player.avatar, 'medium')}
-            width="38"
-            height="38"
-            alt={`${props.player.name}'s avatar`}
-          />
-          <a href={`/players/${props.player.steamId}`} class="player-link">
-            <span class="player-name" safe>
-              {props.player.name}
-            </span>
-
-            {props.slot.skill !== undefined && (
-              <span class="player-assigned-skill">{props.slot.skill}</span>
-            )}
-          </a>
-
-          {showRequestSubstituteButton ? (
-            <RequestSubstituteButton number={props.game.number} />
-          ) : (
-            <></>
-          )}
-
-          {showConnectionState ? (
-            <PlayerConnectionStatusIndicator
-              steamId={props.player.steamId}
-              connectionStatus={props.slot.connectionStatus}
-            />
-          ) : (
-            <></>
-          )}
-        </>
-      )
-
-    case SlotStatus.waitingForSubstitute: {
-      if (
-        actor &&
-        (props.slot.player === actor.steamId ||
-          (actor.activeGame === undefined && !hasActiveBan(actor)))
-      ) {
-        return (
-          <button
-            class="text-abru-light-60 hover:text-abru-light-70 flex flex-1 justify-center"
-            hx-put={`/games/${props.game.number}/replace-player`}
-            hx-trigger="click"
-            aria-label="Replace player"
-            data-umami-event="replace-player"
-            data-umami-event-game-number={props.game.number}
-            data-umami-event-player={props.slot.player}
-            data-umami-event-player-name={props.player.name}
-            data-umami-event-player-class={props.slot.gameClass}
-          >
-            <span class="sr-only">Replace player</span>
-            <IconPlus size={32} />
-          </button>
-        )
-      } else {
-        return <></>
-      }
-    }
-  }
-}
-
-function DeletedGameSlot(props: { slot: GameSlotModel }) {
-  return (
-    <form
-      id={`game-slot-${props.slot.id}`}
-      aria-label="deleted user's slot"
-      class={[
-        'slot',
-        {
-          [SlotStatus.active]: 'active',
-          [SlotStatus.waitingForSubstitute]: 'waiting-for-substitute',
-        }[props.slot.status],
-      ]}
-      style={`grid-area: ${camelCase(props.slot.id)}`}
-      data-status={props.slot.status}
-    >
-      <div class="class-icon">
-        <GameClassIcon gameClass={props.slot.gameClass} size={32} />
-      </div>
+      {mainClass ? (
+        <div class="class-icon">
+          <GameClassIcon gameClass={mainClass} size={32} />
+        </div>
+      ) : (
+        <></>
+      )}
       <img
-        src={playerAvatarUrl(undefined, 'medium')}
+        src={playerAvatarUrl(props.summary?.avatar, 'medium')}
         width="38"
         height="38"
-        alt="deleted user's avatar"
+        alt={`${name}'s avatar`}
       />
-      <span class="player-link">
-        <DeletedUser class="text-[20px] font-medium" />
-      </span>
-    </form>
-  )
-}
-
-function RequestSubstituteButton(props: { number: GameNumber }) {
-  return (
-    <button
-      class="bg-abru-light-85 hover:bg-abru-light-75 rounded-xs p-2 transition-colors duration-75"
-      hx-put={`/games/${props.number}/request-substitute`}
-      hx-trigger="click"
-      aria-label="Request substitute"
-      data-umami-event="request-substitute"
-      data-umami-event-game-number={props.number}
-    >
-      <IconReplaceFilled />
-    </button>
+      <a href={`/players/${props.member.steam_id}`} class="player-link">
+        <span class="player-name" safe>
+          {name}
+        </span>
+        {props.result && (
+          <span class="player-match-stats tabular-nums">
+            {props.result.kills}/{props.result.deaths}
+          </span>
+        )}
+        {props.member.left && <span class="player-match-stats">left</span>}
+      </a>
+    </div>
   )
 }

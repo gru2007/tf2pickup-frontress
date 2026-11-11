@@ -1,93 +1,73 @@
-import { PlayerRole } from '../../../database/models/player.model'
-import { PlayerRestrictionsPage } from '../../../admin/player-restrictions/views/html/player-restrictions.page'
 import { z } from 'zod'
-import { configuration } from '../../../configuration'
-import { requestContext } from '@fastify/request-context'
+import { PlayerRole } from '../../../auth/player-role'
+import { PlayerRestrictionsPage } from '../../../admin/player-restrictions/views/html/player-restrictions.page'
 import { routes } from '../../../utils/routes'
-import { queue } from '../../../queue-auto'
-import type { Tf2ClassName } from '../../../shared/types/tf2-class-name'
+import { gc } from '../../../gc'
+import { saveSettings } from '../../../admin/save-settings'
+import { formValues } from '../../../admin/form-values'
+import { errors } from '../../../errors'
 
-const playerSkillThresholdSchema = z.discriminatedUnion('playerSkillThresholdEnabled', [
-  z.object({
-    playerSkillThresholdEnabled: z.literal(false).optional(),
-  }),
-  z.object({
-    playerSkillThresholdEnabled: z.literal('enabled'),
-    playerSkillThreshold: z.coerce.number(),
-  }),
-])
+const form = z.record(z.string(), z.unknown())
+const steamIds = (value: unknown) => formValues.lines(value).filter(id => /^[0-9]{17}$/.test(id))
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export default routes(async app => {
   app
-    .get(
-      '/',
-      {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
-      },
-      async (_request, reply) => {
-        await reply.status(200).html(PlayerRestrictionsPage())
+    .get('/', { config: { authorize: [PlayerRole.admin] } }, async (_request, reply) => {
+      await reply.status(200).html(PlayerRestrictionsPage())
+    })
+    .post(
+      '/chat',
+      { config: { authorize: [PlayerRole.superUser] }, schema: { body: form } },
+      async (request, reply) => {
+        const { settings } = await gc.settings()
+        const b = request.body
+        const chat = {
+          ...settings.sections.chat,
+          disabled: formValues.checked(b['disabled']),
+          history: formValues.number(b['history']),
+          muted_steam_ids: steamIds(b['muted_steam_ids']),
+          banned_words: formValues.lines(b['banned_words']),
+        }
+        return saveSettings(request, reply, {
+          revision: formValues.number(b['revision']),
+          sections: { chat },
+          note: 'chat',
+          back: '/admin/player-restrictions',
+        })
       },
     )
     .post(
-      '/',
+      '/:id',
       {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
-        schema: {
-          body: z.intersection(
-            playerSkillThresholdSchema,
-            z.object({
-              etf2lAccountRequired: z.coerce.boolean().default(false),
-              minimumInGameHours: z.coerce.number(),
-              requirePlayerVerification: z.coerce.boolean().default(false),
-              skillSuggestions: z.coerce.boolean().default(false),
-              skillStep: z.coerce.number().positive(),
-              ...queue.config.classes
-                .map(({ name }) => name)
-                .reduce<Partial<Record<`defaultPlayerSkill.${Tf2ClassName}`, z.ZodNumber>>>(
-                  (acc, key) => ({ ...acc, [`defaultPlayerSkill.${key}`]: z.coerce.number() }),
-                  {},
-                ),
-            }),
-          ),
-        },
+        config: { authorize: [PlayerRole.superUser] },
+        schema: { params: z.object({ id: z.coerce.number().int() }), body: form },
       },
       async (request, reply) => {
-        const {
-          etf2lAccountRequired,
-          minimumInGameHours,
-          requirePlayerVerification,
-          playerSkillThresholdEnabled,
-          skillSuggestions,
-          skillStep,
-        } = request.body
-        const defaultPlayerSkill = Object.fromEntries(
-          queue.config.classes.map(({ name }) => [
-            name,
-            request.body[`defaultPlayerSkill.${name}`],
-          ]),
-        )
-
-        const actor = request.user!.player.steamId
-        await Promise.all([
-          configuration.set('players.etf2l_account_required', etf2lAccountRequired, actor),
-          configuration.set('players.minimum_in_game_hours', minimumInGameHours, actor),
-          configuration.set('queue.require_player_verification', requirePlayerVerification, actor),
-          configuration.set(
-            'queue.player_skill_threshold',
-            playerSkillThresholdEnabled ? request.body.playerSkillThreshold : null,
-            actor,
-          ),
-          configuration.set('games.default_player_skill', defaultPlayerSkill, actor),
-          configuration.set('games.skill_step', skillStep, actor),
-          configuration.set('games.skill_suggestions', skillSuggestions, actor),
-        ])
-        requestContext.set('messages', { success: ['Configuration saved'] })
-        await reply.status(200).html(PlayerRestrictionsPage())
+        const { settings } = await gc.settings()
+        const groups = settings.sections.match_groups ?? []
+        const group = groups.find(g => g.match_group === request.params.id)
+        if (!group) {
+          throw errors.notFound('No such queue')
+        }
+        const b = request.body
+        group.restrictions = {
+          ...group.restrictions,
+          require_verified_auth: formValues.checked(b['require_verified_auth']),
+          max_party_size: formValues.number(b['max_party_size']),
+          min_party_size: formValues.number(b['min_party_size']),
+          min_matches_played: formValues.number(b['min_matches_played']),
+          abandon_cooldown_mins: formValues.number(b['abandon_cooldown_mins']),
+          max_abandons: formValues.number(b['max_abandons']),
+          allowed_steam_ids: steamIds(b['allowed_steam_ids']),
+          banned_steam_ids: steamIds(b['banned_steam_ids']),
+        }
+        return saveSettings(request, reply, {
+          revision: formValues.number(b['revision']),
+          sections: { match_groups: groups },
+          note: `restrictions of queue ${group.match_group}`,
+          back: '/admin/player-restrictions',
+        })
       },
     )
 })

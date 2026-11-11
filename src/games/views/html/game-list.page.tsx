@@ -1,28 +1,28 @@
 import { resolve } from 'node:path'
 import { NavigationBar } from '../../../html/components/navigation-bar'
 import { Layout } from '../../../html/layout'
-import { collections } from '../../../database/collections'
 import { Page } from '../../../html/components/page'
 import { Footer } from '../../../html/components/footer'
 import { GameListItem } from './game-list-item'
 import { Pagination, paginate } from '../../../html/components/pagination'
 import { makeTitle } from '../../../html/make-title'
-import type { PickDeep } from 'type-fest'
-import type { GameModel } from '../../../database/models/game.model'
+import { gc } from '../../../gc'
+import { CoordinatorStatus } from './coordinator-status'
 
 const itemsPerPage = 8
 
-export async function GameListPage(props: { page: number }) {
+export async function GameListPage(props: { page: number; home?: boolean }) {
   return (
     <Layout
-      title={makeTitle('games')}
+      title={props.home ? undefined : makeTitle('games')}
       description={`games - page ${props.page}`}
-      canonical="/games"
+      canonical={props.home ? '/' : '/games'}
       embedStyle={resolve(import.meta.dirname, 'game-list.css')}
     >
       <NavigationBar />
       <Page>
         <div class="container mx-auto">
+          <CoordinatorStatus />
           <div class="text-abru-light-75 my-9 text-[48px] font-bold">Games</div>
           <div class="contents" id="gameList">
             <GameList {...props} />
@@ -36,26 +36,9 @@ export async function GameListPage(props: { page: number }) {
 
 export async function GameList(props: { page: number }) {
   const { page } = props
-  const { last, around } = paginate(page, itemsPerPage, await collections.games.countDocuments())
-  const skip = (page - 1) * itemsPerPage
-
-  const games = await collections.games
-    .find<PickDeep<GameModel, 'number' | 'state' | 'events.0' | 'score' | 'map'>>(
-      {},
-      {
-        limit: itemsPerPage,
-        skip,
-        sort: { 'events.0.at': -1 },
-        projection: {
-          number: 1,
-          state: 1,
-          score: 1,
-          map: 1,
-          events: { $slice: 1 },
-        },
-      },
-    )
-    .toArray()
+  const result = await gc.matches({ offset: (page - 1) * itemsPerPage, limit: itemsPerPage })
+  const { last, around } = paginate(page, itemsPerPage, result.total)
+  const games = result.matches ?? []
 
   return games.length > 0 ? (
     <>

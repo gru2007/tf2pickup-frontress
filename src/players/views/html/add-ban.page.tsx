@@ -3,19 +3,19 @@ import { Footer } from '../../../html/components/footer'
 import { NavigationBar } from '../../../html/components/navigation-bar'
 import { Page } from '../../../html/components/page'
 import { Layout } from '../../../html/layout'
-import { format } from 'date-fns'
 import { makeTitle } from '../../../html/make-title'
 import type { SteamId64 } from '../../../shared/types/steam-id-64'
-import { players } from '../..'
-import { getBanExpiryDate } from '../../get-ban-expiry-date'
-import { environment } from '../../../environment'
+import { gc } from '../../../gc'
+import { firstNonEmpty } from '../../../utils/first-non-empty'
 
-export async function AddBanPage(props: { steamId: SteamId64 }) {
-  const player = await players.bySteamId(props.steamId, ['name'])
-  const safeWebsiteName = environment.WEBSITE_NAME
+// A matchmaking ban: the coordinator keeps the player out of every queue.
+// From the reports page it also closes the player's open reports.
+export async function AddBanPage(props: { steamId: SteamId64; fromReports: boolean }) {
+  const name =
+    firstNonEmpty((await gc.player(props.steamId).catch(() => null))?.name) ?? props.steamId
   return (
     <Layout
-      title={makeTitle(`Ban ${player.name}`)}
+      title={makeTitle(`Ban ${name}`)}
       embedStyle={resolve(
         import.meta.dirname,
         '..',
@@ -31,6 +31,7 @@ export async function AddBanPage(props: { steamId: SteamId64 }) {
       <Page>
         <div class="container mx-auto">
           <form action="" method="post" id="addBanForm">
+            {props.fromReports && <input type="hidden" name="reports" value="1" />}
             <div class="admin-panel-set">
               <div class="form-checkbox">
                 <input
@@ -49,38 +50,15 @@ export async function AddBanPage(props: { steamId: SteamId64 }) {
                 data-toggle-disabled-control="lengthSelector"
                 data-toggle-disabled-value="duration"
               >
-                <input type="number" name="duration" id="duration-value" value="1" />
+                <input type="number" name="duration" id="duration-value" value="1" min="1" />
                 <select name="durationUnits">
-                  <option value="minutes">minutes</option>
                   <option value="hours">hours</option>
-                  <option value="days">days</option>
+                  <option value="days" selected>
+                    days
+                  </option>
                   <option value="weeks">weeks</option>
                   <option value="months">months</option>
-                  <option value="years">years</option>
                 </select>
-              </fieldset>
-
-              <div class="form-checkbox">
-                <input type="radio" name="lengthSelector" id="lengthSelectorEndDate" value="date" />
-                <label for="lengthSelectorEndDate">End date</label>
-              </div>
-
-              <fieldset
-                class="mb-2 ml-[22px]"
-                disabled
-                data-toggle-disabled-form="#addBanForm"
-                data-toggle-disabled-control="lengthSelector"
-                data-toggle-disabled-value="date"
-              >
-                <input
-                  type="datetime-local"
-                  name="date"
-                  id="banEndDate"
-                  value={format(new Date(), `yyyy-MM-dd'T'HH:mm`)}
-                />
-                <label for="banEndDate" class="sr-only">
-                  Ban end date
-                </label>
               </fieldset>
 
               <div class="form-checkbox">
@@ -90,44 +68,22 @@ export async function AddBanPage(props: { steamId: SteamId64 }) {
                   id="lengthSelectorForever"
                   value="forever"
                 />
-                <label for="lengthSelectorForever">Forever</label>
+                <label for="lengthSelectorForever">Until lifted</label>
               </div>
-
-              <p>
-                Ban ends at{' '}
-                <span
-                  id="banEndsAt"
-                  hx-get="/players/ban-expiry"
-                  hx-include="#addBanForm"
-                  hx-params="*"
-                  hx-trigger="change from:#addBanForm delay:1s"
-                >
-                  {
-                    format(
-                      getBanExpiryDate({
-                        lengthSelector: 'duration',
-                        duration: 1,
-                        durationUnits: 'minutes',
-                      }),
-                      'dd.MM.yyyy HH:mm',
-                    ) as 'safe'
-                  }
-                </span>
-              </p>
 
               <div class="input-group my-4">
                 <label class="form-label" for="banReason">
                   Reason
                 </label>
-                <input type="text" name="reason" id="banReason" required />
+                <input type="text" name="reason" id="banReason" maxlength="300" required />
               </div>
 
               <div class="form-checkbox">
-                <input type="checkbox" name="anonymous" id="banAnonymous" />
-                <label for="banAnonymous">Anonymous</label>
+                <input type="checkbox" name="steam" id="banSteam" />
+                <label for="banSteam">Also issue a Steam game ban</label>
                 <p class="description">
-                  The banned player will see this ban as issued by {safeWebsiteName} Staff. Admins
-                  will still see who issued it.
+                  Only for bans until lifted, and only when Steam game bans are enabled on the
+                  coordinator. A Steam game ban is public and shows on the player's Steam profile.
                 </p>
               </div>
             </div>

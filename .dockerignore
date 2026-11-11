@@ -6,9 +6,8 @@ node_modules
 .prettierignore
 .prettierrc
 eslint.config.js
-playwright.config.ts
 *.md
+!src/documents/default/*.md
 .env
 .env.*
 !.env.example
-tests/.auth

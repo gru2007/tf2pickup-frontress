@@ -1,42 +1,23 @@
-# Privacy policy
+## What we keep
 
-This privacy notice for tf2pickup.org, describes how and why we might collect, store, use, and/or share your information when you use our services, such as when you:
+Team Frontress is played through the Frontress game coordinator. To run matches it keeps, by your SteamID64:
 
-- visit our website at [tf2pickup.pl](https://tf2pickup.pl/),
-- use our game servers.
+- the name your game reported and your match results (score, kills, damage, healing, classes, XP and rating);
+- your parties, queues and the matches you played in;
+- reports you sent and reports about you;
+- what Easy Anti-Cheat reported about your sessions, and any ban;
+- donations and subscriptions you made through Steam, if any.
 
-### What information do we collect?
+For moderation the coordinator also keeps a log for 30 days: when your game connected and from which IP address, your parties and searches, the matches you joined and left, and what you wrote in the menu's chat. Only the staff can read it.
 
-**Personal information provided by you**, but only the following:
+## This website
 
-- usernames,
-- SteamID,
-- IP address.
+This website keeps nothing of its own. Signing in through Steam tells it your SteamID64; it stores that, your Steam name and avatar in an encrypted cookie in your browser for up to a week. Everything else it shows comes from the coordinator at the moment you open a page.
 
-### How do we process your information?
+## Who sees it
 
-We process your information to provide and improve our services as well as to communicate with you.
+Your profile, your match history and the scoreboards of your matches are public. Your bans, quests and donations are shown only to you and to the staff. The log is shown only to the staff. Reports are shown only to the staff, and never tell the reported player who reported them.
 
-### What legal bases do we rely on to process your information?
+## Questions
 
-We only process your personal information when we believe it is necessary.
-
-### When and with whom do we share your personal information?
-
-We do not share your personal information with any third parties.
-
-### How do we handle your social logins?
-
-If you choose to register or log in to our website using a social media account, we may have access to certain information, provided by the third party social media provider.
-
-### How long do we keep your information?
-
-We keep your information for as long as necessary to provide our services.
-
-### How do we keep your information safe?
-
-We aim to protect your personal information through a system of organizational and technical security measures.
-
-### How can you contact us about this notice?
-
-If you have questions or comments about this notice, you may email us at garrappachc@gmail.com.
+Contact the people listed on the [staff page](/staff).

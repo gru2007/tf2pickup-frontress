@@ -1,19 +1,9 @@
 import { requestContext } from '@fastify/request-context'
 import { GamesLink } from './games-link'
-import {
-  IconBrandDiscord,
-  IconChartPie,
-  IconCrown,
-  IconHeart,
-  IconLogout,
-  IconMenu2,
-  IconSettings,
-  IconX,
-} from './icons'
+import { IconBrandDiscord, IconCrown, IconDownload, IconLogout, IconMenu2, IconX } from './icons'
 import { IconBrandSteam } from './icons/icon-brand-steam'
 import { Profile } from './profile'
 import Html from '@kitajs/html'
-import { configuration } from '../../configuration'
 import { environment } from '../../environment'
 import { playerAvatarUrl } from '../../shared/player-avatar-url'
 
@@ -99,9 +89,9 @@ export function NavigationBar() {
   )
 }
 
-async function Menu() {
+function Menu() {
   const user = requestContext.get('user')
-  const discordInvite = await configuration.get('misc.discord_invite_link')
+  const discordInvite = environment.DISCORD_INVITE_URL
 
   return (
     <div class="flex flex-col gap-[10px] px-4 lg:flex-row lg:items-center lg:px-0">
@@ -114,21 +104,15 @@ async function Menu() {
         HOF
       </MenuItem>
 
-      <MenuItem href="/statistics">
-        <IconChartPie />
-        Stats
-      </MenuItem>
-
       <div class="hidden w-8 xl:block" />
       <div class="bg-abru-light-10 my-2 h-px lg:hidden" />
 
       <div class="flex flex-row items-center gap-7 p-3 lg:contents">
-        {discordInvite !== null && (
+        {discordInvite !== undefined && (
           <a
             href={discordInvite}
             class="text-abru-light-75 hover:text-slate-200 lg:hidden xl:inline-block"
             target="_blank"
-            data-umami-event="social-discord"
           >
             <IconBrandDiscord size={32} class="max-lg:h-6 max-lg:w-6" />
             <span class="tooltip whitespace-nowrap" data-placement="bottom">
@@ -137,28 +121,25 @@ async function Menu() {
           </a>
         )}
 
-        <a
-          href="https://ko-fi.com/tf2pickuporg"
-          class="text-abru-light-75 hover:text-slate-200 lg:hidden xl:inline-block"
-          target="_blank"
-          data-umami-event="social-kofi"
-        >
-          <IconHeart size={32} class="max-lg:h-6 max-lg:w-6" />
-          <span class="tooltip whitespace-nowrap" data-placement="bottom">
-            Support us on Ko-fi!
-          </span>
-        </a>
+        {environment.DOWNLOAD_URL !== undefined && (
+          <a
+            href={environment.DOWNLOAD_URL}
+            class="text-abru-light-75 hover:text-slate-200 lg:hidden xl:inline-block"
+            target="_blank"
+          >
+            <IconDownload size={32} class="max-lg:h-6 max-lg:w-6" />
+            <span class="tooltip whitespace-nowrap" data-placement="bottom">
+              Get the game
+            </span>
+          </a>
+        )}
 
         {!!user && (
           <>
-            <a href="/settings" class="text-abru-light-75 lg:hidden" aria-label="Settings">
-              <IconSettings size={24} />
-            </a>
             <a
               href="/auth/sign-out"
               class="text-accent-600 lg:hidden"
               aria-label="Sign out"
-              data-umami-event="logout"
               hx-boost="false"
             >
               <IconLogout size={24} />
@@ -186,12 +167,7 @@ function MenuItem({ href, children }: Html.PropsWithChildren<{ href: string }>) 
 
 function SteamButton() {
   return (
-    <a
-      href="/auth/steam"
-      class="nav-steam-button max-lg:p-2"
-      hx-boost="false"
-      data-umami-event="login-steam"
-    >
+    <a href="/auth/steam" class="nav-steam-button max-lg:p-2" hx-boost="false">
       <span class="max-lg:hidden">Sign in through Steam</span>
       <div class="icon">
         <IconBrandSteam />

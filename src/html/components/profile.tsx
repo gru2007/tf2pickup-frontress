@@ -1,11 +1,17 @@
 import { resolve } from 'node:path'
-import type { PlayerModel } from '../../database/models/player.model'
 import { bundle } from '../bundle'
-import { IconLogout, IconSettings, IconSettingsFilled, IconUserCircle } from './icons'
-import type { PickDeep } from 'type-fest'
+import {
+  IconLogout,
+  IconSettings,
+  IconSettingsFilled,
+  IconAdjustments,
+  IconUserCircle,
+} from './icons'
+import type { User } from '../../auth/types/user'
 import { playerAvatarUrl } from '../../shared/player-avatar-url'
+import { PlayerRole } from '../../auth/player-role'
 
-export async function Profile(player: PickDeep<PlayerModel, 'steamId' | 'name' | 'avatar.medium'>) {
+export async function Profile(player: User['player']) {
   const animateProfileMenuJs = await bundle(
     resolve(import.meta.dirname, '../@client/animate-profile-menu.ts'),
   )
@@ -17,7 +23,7 @@ export async function Profile(player: PickDeep<PlayerModel, 'steamId' | 'name' |
             src={playerAvatarUrl(player.avatar, 'medium')}
             width="64"
             class="h-[42px] w-[42px] rounded-[3px]"
-            alt="{name}'s avatar"
+            alt={`${player.name}'s avatar`}
           />
           <span class="grow overflow-hidden text-2xl text-ellipsis whitespace-nowrap" safe>
             {player.name}
@@ -48,17 +54,20 @@ export async function Profile(player: PickDeep<PlayerModel, 'steamId' | 'name' |
               <IconUserCircle />
               <span>My profile</span>
             </a>
-            <div class="profile-menu-divider" />
-            <a href="/settings" class="profile-menu-item" preload="mousedown">
-              <IconSettings />
-              <span>Settings</span>
-            </a>
+            {player.roles.includes(PlayerRole.admin) && (
+              <>
+                <div class="profile-menu-divider" />
+                <a href="/admin" class="profile-menu-item" preload="mousedown">
+                  <IconAdjustments />
+                  <span>Admin panel</span>
+                </a>
+              </>
+            )}
             <div class="profile-menu-divider" />
             <a
               href="/auth/sign-out"
               class="profile-menu-item"
               data-variant="accent"
-              data-umami-event="logout"
               hx-boost="false"
             >
               <IconLogout />

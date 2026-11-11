@@ -1,22 +1,42 @@
 import { resolve } from 'node:path'
 import { NavigationBar } from '../../../html/components/navigation-bar'
 import { Layout } from '../../../html/layout'
-import type { PlayerModel } from '../../../database/models/player.model'
 import { deburr } from 'es-toolkit'
-import { collections } from '../../../database/collections'
+import { gc } from '../../../gc'
 import { Page } from '../../../html/components/page'
 import { Footer } from '../../../html/components/footer'
 import { makeTitle } from '../../../html/make-title'
+import { firstNonEmpty } from '../../../utils/first-non-empty'
 
 const latin = Array.from(Array(26)).map((_e, i) => String.fromCharCode(i + 65))
 
-export async function PlayerListPage() {
-  const players = await collections.players
-    .find<Pick<PlayerModel, 'steamId' | 'name'>>(
-      {},
-      { projection: { _id: 0, steamId: 1, name: 1 } },
+interface ListedPlayer {
+  steamId: string
+  name: string
+}
+
+const pageSize = 200
+const maxPlayers = 5000
+
+async function fetchPlayers(q: string | undefined): Promise<ListedPlayer[]> {
+  const out: ListedPlayer[] = []
+  for (let offset = 0; offset < maxPlayers; offset += pageSize) {
+    const page = await gc.players({ q, sort: 'recent', offset, limit: pageSize })
+    out.push(
+      ...page.players.map(p => ({
+        steamId: p.steam_id,
+        name: firstNonEmpty(p.name) ?? p.steam_id,
+      })),
     )
-    .toArray()
+    if (offset + pageSize >= page.total) {
+      break
+    }
+  }
+  return out
+}
+
+export async function PlayerListPage(props: { q?: string | undefined } = {}) {
+  const players = await fetchPlayers(props.q)
   const groupedPlayers = groupPlayers(players)
 
   // Append non-Latin letters (e.g. Cyrillic) only when this instance's players use them.
@@ -35,7 +55,15 @@ export async function PlayerListPage() {
       <NavigationBar />
       <Page>
         <div class="container mx-auto">
-          <div class="text-abru-light-75 my-9 text-[48px] font-bold">Players</div>
+          <div class="my-9 flex flex-row flex-wrap items-center gap-4">
+            <div class="text-abru-light-75 text-[48px] font-bold">Players</div>
+            <form method="get" action="/players" class="ml-auto flex flex-row gap-2">
+              <input type="text" name="q" value={props.q ?? ''} placeholder="Name or SteamID" />
+              <button type="submit" class="button" data-size="dense">
+                Search
+              </button>
+            </form>
+          </div>
 
           <div class="player-list-index">
             {groups.map(letter => (
@@ -68,9 +96,7 @@ export async function PlayerListPage() {
   )
 }
 
-function groupPlayers(
-  players: Pick<PlayerModel, 'steamId' | 'name'>[],
-): Map<string, Pick<PlayerModel, 'steamId' | 'name'>[]> {
+function groupPlayers(players: ListedPlayer[]): Map<string, ListedPlayer[]> {
   return players.reduce((result, player) => {
     const first = player.name
       .replace(
@@ -96,5 +122,5 @@ function groupPlayers(
     result.get(key)!.push(player)
 
     return result
-  }, new Map<string, Pick<PlayerModel, 'steamId' | 'name'>[]>())
+  }, new Map<string, ListedPlayer[]>())
 }

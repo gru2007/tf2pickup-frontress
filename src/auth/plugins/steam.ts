@@ -1,18 +1,21 @@
 import fp from 'fastify-plugin'
 import { openId } from '../open-id'
 import { environment } from '../../environment'
-import SteamAPI from 'steamapi'
 import { logger } from '../../logger'
 import type { SteamId64 } from '../../shared/types/steam-id-64'
-import { players } from '../../players'
 import type { User } from '../types/user'
-import { SteamApiError } from '../../steam/errors/steam-api.error'
-import { PrivateSteamProfilePage } from '../views/html/private-steam-profile.page'
 import { withLogLevel } from '../../utils/with-log-level'
+import { getPlayerSummaries } from '../../steam/get-player-summaries'
+import { rolesOf } from '../roles-of'
+import { gc } from '../../gc'
+import { defaultPlayerAvatar } from '../../shared/default-player-avatar'
+import { firstNonEmpty } from '../../utils/first-non-empty'
 
 declare module '@fastify/secure-session' {
   interface SessionData {
     steamId: SteamId64
+    name: string
+    avatar: string
   }
 }
 
@@ -21,8 +24,6 @@ declare module '@fastify/request-context' {
     user?: User
   }
 }
-
-const steamApi = new SteamAPI(environment.STEAM_API_KEY)
 
 const getSteamLoginUrl = async (): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -41,14 +42,13 @@ const getSteamLoginUrl = async (): Promise<string> =>
     })
   })
 
-const verifySteamCallback = (url: string): Promise<string> =>
+const verifySteamCallback = (url: string): Promise<SteamId64> =>
   new Promise((resolve, reject) => {
     openId.verifyAssertion(url, (err, result) => {
       if (err) {
         const error = new Error(err.message)
         // A replayed nonce just means a stale/duplicated callback request (e.g.
         // the user refreshed the return URL), not a server fault — log at debug.
-        // Other assertion failures are rarer and kept at the default level.
         reject(err.message === 'Invalid or replayed nonce' ? withLogLevel(error, 'debug') : error)
         return
       }
@@ -68,16 +68,12 @@ const verifySteamCallback = (url: string): Promise<string> =>
         return
       }
 
-      const steamId = result.claimedIdentifier.split('/').pop()
-      if (!steamId) {
-        reject(new Error('invalid claimIdentifier'))
-        return
-      }
-
-      resolve(steamId)
+      resolve(result.claimedIdentifier.split('/').pop() as SteamId64)
     })
   })
 
+// Steam sign-in. Nothing is stored on this site: the session cookie holds the
+// SteamID with the name and avatar Steam (or the coordinator) gave at sign-in.
 export default fp(
   // eslint-disable-next-line @typescript-eslint/require-await
   async app => {
@@ -88,50 +84,38 @@ export default fp(
 
     app.get('/auth/steam/return', async (request, reply) => {
       const steamId = await verifySteamCallback(request.url)
-      const user = await steamApi.getUserSummary(steamId)
+      const summary = (await getPlayerSummaries([steamId])).get(steamId)!
+      const name =
+        firstNonEmpty(summary.name, (await gc.player(steamId).catch(() => undefined))?.name) ??
+        steamId
 
-      logger.debug({ user }, 'user authenticated')
-
-      let player
-      try {
-        player = await players.upsert(user)
-      } catch (error) {
-        if (error instanceof SteamApiError) {
-          return reply.code(403).html(PrivateSteamProfilePage())
-        }
-        throw error
-      }
-
-      request.session.set('steamId', player.steamId)
-
-      const returnUrl = environment.WEBSITE_URL
-      logger.trace({ user, player }, `redirecting to ${returnUrl}`)
-      return await reply.redirect(returnUrl, 302)
+      logger.debug({ steamId }, 'user authenticated')
+      request.session.set('steamId', steamId)
+      request.session.set('name', name)
+      request.session.set('avatar', summary.avatar.medium)
+      return await reply.redirect(`${environment.WEBSITE_URL}/players/${steamId}`, 302)
     })
 
     app.decorateRequest('user', undefined)
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     app.addHook('preHandler', async request => {
       const steamId = request.session.get('steamId')
-      if (steamId) {
-        try {
-          const player = await players.bySteamId(steamId, [
-            'steamId',
-            'roles',
-            'name',
-            'avatar.medium',
-            'preferences.soundVolume',
-            'hasAcceptedRules',
-            'activeGame',
-            'twitchTvProfile',
-          ])
-          request.user = { player }
-          request.requestContext.set('user', { player })
-        } catch (e) {
-          logger.error(e)
-          request.session.regenerate()
-        }
+      if (!steamId) {
+        return
       }
+      const user: User = {
+        player: {
+          steamId,
+          name: request.session.get('name') ?? steamId,
+          avatar: {
+            medium: firstNonEmpty(request.session.get('avatar')) ?? defaultPlayerAvatar.medium,
+          },
+          roles: rolesOf(steamId),
+        },
+      }
+      request.user = user
+      request.requestContext.set('user', user)
     })
   },
   { name: 'auth/steam' },

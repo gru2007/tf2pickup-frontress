@@ -11,20 +11,12 @@ import {
   IconAdjustments,
   IconAdjustmentsStar,
   IconAlertSquareRounded,
-  IconArrowsShuffle,
-  IconBrandDiscord,
-  IconHeadset,
-  IconHistory,
+  IconHeart,
   IconLogs,
   IconMapPinCog,
   IconMoodNerd,
-  IconSectionSign,
   IconServer,
-  IconSpy,
-  IconTable,
-  IconTrash,
   IconUserExclamation,
-  IconUserPlus,
 } from '../../../html/components/icons'
 import { NavigationBar } from '../../../html/components/navigation-bar'
 import { Page } from '../../../html/components/page'
@@ -32,97 +24,57 @@ import { Layout } from '../../../html/layout'
 import { Footer } from '../../../html/components/footer'
 import { resolve } from 'path'
 import { makeTitle } from '../../../html/make-title'
-import { PlayerRole } from '../../../database/models/player.model'
+import { PlayerRole } from '../../../auth/player-role'
 import { requestContext } from '@fastify/request-context'
 
 const adminPages = {
-  'player-restrictions': {
-    title: 'Player restrictions',
-    icon: IconUserExclamation,
-    section: 'Configuration',
+  'game-servers': {
+    title: 'Game servers',
+    icon: IconServer,
+    section: 'Coordinator',
   },
   games: {
     title: 'Games',
     icon: IconAdjustments,
-    section: 'Configuration',
+    section: 'Coordinator',
   },
   'map-pool': {
     title: 'Map pool',
     icon: IconMapPinCog,
-    section: 'Configuration',
-  },
-  'game-servers': {
-    title: 'Game servers',
-    icon: IconServer,
-    section: 'Configuration',
-  },
-  'voice-server': {
-    title: 'Voice server',
-    icon: IconHeadset,
-    section: 'Configuration',
-  },
-  discord: {
-    title: 'Discord',
-    icon: IconBrandDiscord,
-    section: 'Configuration',
-  },
-  announcements: {
-    title: 'Announcements',
-    icon: IconAlertSquareRounded,
-    section: 'Configuration',
+    section: 'Coordinator',
   },
   miscellaneous: {
     title: 'Miscellaneous',
     icon: IconAdjustmentsStar,
-    section: 'Configuration',
+    section: 'Coordinator',
   },
   'view-for-nerds': {
     title: 'View for nerds',
     icon: IconMoodNerd,
-    section: 'Configuration',
+    section: 'Coordinator',
   },
-  'activity-log': {
-    title: 'Activity log',
-    icon: IconHistory,
-    section: 'Configuration',
+  reports: {
+    title: 'Player reports',
+    icon: IconAlertSquareRounded,
+    section: 'Moderation',
   },
-  'scramble-maps': {
-    title: 'Scramble maps',
-    icon: IconArrowsShuffle,
-    section: 'Actions',
+  'player-restrictions': {
+    title: 'Player restrictions',
+    icon: IconUserExclamation,
+    section: 'Moderation',
   },
-  'bypass-registration-restrictions': {
-    title: 'Bypass restrictions',
-    icon: IconUserPlus,
-    section: 'Actions',
-  },
-  'skill-import-export': {
-    title: 'Skill import/export',
-    icon: IconTable,
-    section: 'Actions',
-  },
-  rules: {
-    title: 'Rules',
-    icon: IconSectionSign,
-    section: 'Documents',
-  },
-  'privacy-policy': {
-    title: 'Privacy policy',
-    icon: IconSpy,
-    section: 'Documents',
+  logs: {
+    title: 'Logs',
+    icon: IconLogs,
+    section: 'Moderation',
   },
 } as const
 
 const superUserPages = {
-  'player-action-logs': {
-    title: 'Player action logs',
-    icon: IconLogs,
-    section: 'Configuration',
-  },
-  'delete-player': {
-    title: 'Delete player',
-    icon: IconTrash,
-    section: 'Actions',
+  payments: {
+    title: 'Payments',
+    icon: IconHeart,
+    section: 'Super-user',
   },
 } as const
 

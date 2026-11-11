@@ -1,222 +1,63 @@
-import { configuration } from '../../../../configuration'
-import { Switch } from '../../../../html/components/switch'
-import { queue } from '../../../../queue-auto'
+import { format } from 'date-fns'
+import { gc } from '../../../../gc'
 import { Admin } from '../../../views/html/admin'
-import { SaveButton } from '../../../views/html/save-button'
-import { GameClassSkillInput } from '../../../../html/components/game-class-skill-input'
+import { AdminCell, AdminTable } from '../../../views/html/admin-table'
+import { PlayerLink } from '../../../../html/components/player-link'
+import { RestrictionSettings } from './restriction-settings'
 
+// Everybody the coordinator keeps out of matchmaking right now, whether a
+// moderator or Easy Anti-Cheat put them there. Queue restrictions (party size,
+// minimum matches, abandon cooldowns) and chat follow, saved to the coordinator.
 export async function PlayerRestrictionsPage() {
+  const [{ sanctions }, settings] = await Promise.all([gc.sanctions(), gc.settings()])
   return (
     <Admin activePage="player-restrictions">
-      <form action="" method="post" id="playerRestrictionsForm">
-        <div class="admin-panel-set flex flex-col gap-4">
-          <RequireEtf2lAccount />
-          <MinimumTf2InGameHours />
-          <RequirePlayerVerification />
-          <PlayerSkillThreshold />
-          <SkillStep />
-          <SkillSuggestions />
-          <DefaultPlayerSkill />
-
-          <p>
-            <SaveButton />
-          </p>
+      <div class="admin-panel-set">
+        <h4 class="pb-4">Active matchmaking bans</h4>
+        <div class="max-lg:overflow-x-auto">
+          <AdminTable head={['Player', 'Kind', 'Reason', 'By', 'Since', 'Until']}>
+            {(sanctions ?? []).map(record => (
+              <tr>
+                <AdminCell bold>
+                  <a href={`/players/${record.steam_id}/edit/bans`} class="underline" safe>
+                    {record.steam_id}
+                  </a>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{record.sanction?.kind ?? ''}</span>
+                  {record.steam_ban && <div class="text-xs text-red-400">Steam game ban</div>}
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{record.sanction?.reason ?? ''}</span>
+                </AdminCell>
+                <AdminCell>
+                  {record.sanction?.by.startsWith('admin:') ? (
+                    <PlayerLink steamId={record.sanction.by.slice(6)} class="underline" />
+                  ) : (
+                    <span safe>{record.sanction?.by ?? ''}</span>
+                  )}
+                </AdminCell>
+                <AdminCell>
+                  <span safe>
+                    {record.sanction ? format(record.sanction.since, 'dd.MM.yyyy HH:mm') : ''}
+                  </span>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>
+                    {record.sanction?.until
+                      ? format(record.sanction.until, 'dd.MM.yyyy HH:mm')
+                      : 'until lifted'}
+                  </span>
+                </AdminCell>
+              </tr>
+            ))}
+          </AdminTable>
+          {(sanctions ?? []).length === 0 && (
+            <p class="text-abru-light-75 mt-4 italic">Nobody is banned.</p>
+          )}
         </div>
-      </form>
+      </div>
+      <RestrictionSettings settings={settings.settings} />
     </Admin>
-  )
-}
-
-async function RequireEtf2lAccount() {
-  const etf2lAccountRequired = await configuration.get('players.etf2l_account_required')
-  return (
-    <div class="group flex flex-row items-center justify-between">
-      <dl>
-        <dt>
-          <label class="text-abru-light-75" for="etf2lAccountRequired">
-            Require ETF2L account
-          </label>
-        </dt>
-        <dd class="text-abru-light-75">
-          <span class="hidden group-has-checked:inline-block">
-            Players that do not have an ETF2L profile will not be able to register
-          </span>
-          <span class="group-has-checked:hidden">All players will be able to register</span>
-        </dd>
-      </dl>
-
-      <Switch
-        id="etf2lAccountRequired"
-        checked={etf2lAccountRequired}
-        name="etf2lAccountRequired"
-      />
-    </div>
-  )
-}
-
-async function MinimumTf2InGameHours() {
-  const minimumInGameHours = await configuration.get('players.minimum_in_game_hours')
-  return (
-    <dl>
-      <dt>
-        <label for="minimumInGameHours">Minimum TF2 in-game hours</label>
-      </dt>
-      <dd>
-        <input
-          type="text"
-          value={minimumInGameHours.toString()}
-          id="minimumInGameHours"
-          name="minimumInGameHours"
-        />
-      </dd>
-    </dl>
-  )
-}
-
-async function RequirePlayerVerification() {
-  const requirePlayerVerification = await configuration.get('queue.require_player_verification')
-  return (
-    <div class="group flex flex-row items-center justify-between">
-      <dl>
-        <dt>
-          <label class="text-abru-light-75" for="requirePlayerVerification">
-            Require player verification
-          </label>
-        </dt>
-        <dd class="text-abru-light-75">
-          <span class="hidden group-has-checked:inline-block">
-            Players must be manually verified by an admin before they can join the queue
-          </span>
-          <span class="group-has-checked:hidden">All players can join the queue freely</span>
-        </dd>
-      </dl>
-
-      <Switch
-        id="requirePlayerVerification"
-        checked={requirePlayerVerification}
-        name="requirePlayerVerification"
-      />
-    </div>
-  )
-}
-
-async function PlayerSkillThreshold() {
-  const playerSkillThreshold = await configuration.get('queue.player_skill_threshold')
-  const playerSkillThresholdEnabled = playerSkillThreshold !== null
-
-  return (
-    <dl>
-      <dt class="group flex flex-row gap-2">
-        <label for="playerSkillThresholdEnabled">Player skill threshold</label>
-        <input
-          type="checkbox"
-          id="playerSkillThresholdEnabled"
-          name="playerSkillThresholdEnabled"
-          value="enabled"
-          checked={playerSkillThresholdEnabled}
-        />
-        <span class="hidden group-has-checked:inline-block">enabled</span>
-        <span class="group-has-checked:hidden">disabled</span>
-      </dt>
-      <dd class="flex flex-col">
-        <div>
-          <label for="playerSkillThreshold" class="sr-only">
-            Player skill threshold value
-          </label>
-          <input
-            type="number"
-            id="playerSkillThreshold"
-            name="playerSkillThreshold"
-            value={playerSkillThreshold?.toString()}
-            disabled={!playerSkillThresholdEnabled}
-            data-toggle-disabled-form="#playerRestrictionsForm"
-            data-toggle-disabled-control="playerSkillThresholdEnabled"
-            data-toggle-disabled-checked="true"
-          />
-        </div>
-        <p class="text-abru-light-75 text-sm">
-          Players will be able to join queue only on classes that meet the given criteria.
-        </p>
-      </dd>
-    </dl>
-  )
-}
-
-async function SkillStep() {
-  const skillStep = await configuration.get('games.skill_step')
-  return (
-    <dl>
-      <dt>
-        <label for="skillStep">Skill step</label>
-      </dt>
-      <dd class="flex flex-col">
-        <div>
-          <input
-            type="number"
-            id="skillStep"
-            name="skillStep"
-            value={skillStep.toString()}
-            step="0.1"
-            min="0.1"
-          />
-        </div>
-        <p class="text-abru-light-75 text-sm">
-          Increment/decrement step when adjusting player skill in the admin panel.
-        </p>
-      </dd>
-    </dl>
-  )
-}
-
-async function SkillSuggestions() {
-  const skillSuggestions = await configuration.get('games.skill_suggestions')
-  return (
-    <div class="group flex flex-row items-center justify-between">
-      <dl>
-        <dt>
-          <label class="text-abru-light-75" for="skillSuggestions">
-            Skill suggestions{' '}
-            <span class="text-abru-light-35 text-xs font-normal">experimental</span>
-          </label>
-        </dt>
-        <dd class="text-abru-light-75">
-          <span class="hidden group-has-checked:inline-block">
-            Skill adjustment suggestions are shown in the admin toolbox
-          </span>
-          <span class="group-has-checked:hidden">No skill suggestions are shown</span>
-        </dd>
-      </dl>
-      <Switch id="skillSuggestions" checked={skillSuggestions} name="skillSuggestions" />
-    </div>
-  )
-}
-
-async function DefaultPlayerSkill() {
-  const defaultPlayerSkill = await configuration.get('games.default_player_skill')
-  const skillStep = await configuration.get('games.skill_step')
-  const classes = queue.config.classes.map(({ name }) => name)
-
-  return (
-    <dl>
-      <dt>
-        <span class="text-abru-light-75 font-bold">Default player skill</span>
-      </dt>
-      <dd class="flex flex-col">
-        <div class="flex flex-row flex-wrap gap-2">
-          {classes.map(gameClass => (
-            <GameClassSkillInput
-              gameClass={gameClass}
-              name={`defaultPlayerSkill.${gameClass}`}
-              value={defaultPlayerSkill[gameClass] ?? 1}
-              step={skillStep}
-            />
-          ))}
-        </div>
-        <p class="text-abru-light-75 text-sm">
-          If a player starts a game without skill assigned for them, the game balance system will
-          use this fallback value.
-        </p>
-      </dd>
-    </dl>
   )
 }

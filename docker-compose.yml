@@ -1,62 +1,9 @@
+# The portal on its own. The game coordinator runs from team-frontress
+# (deploy/frontress/compose.yaml); point GC_URL at it.
 services:
-  mongo:
-    image: mongo
+  portal:
+    build: .
+    restart: unless-stopped
+    env_file: .env
     ports:
-      - '27017:27017'
-    volumes:
-      - mongo:/data/db
-
-  mumble:
-    image: mumblevoip/mumble-server:latest
-    environment:
-      - MUMBLE_SUPERUSER_PASSWORD=123456
-    ports:
-      - 64738:64738/tcp
-      - 64738:64738/udp
-    profiles: [mumble]
-
-  gameserver:
-    image: ghcr.io/tf2pickup-org/tf2-gameserver:latest
-    environment:
-      - 'SERVER_HOSTNAME=test game server 1'
-      - 'PORT=27015'
-      - 'CLIENT_PORT=27016'
-      - 'STEAM_PORT=27017'
-      - 'STV_PORT=27020'
-      - 'RCON_PASSWORD=123456'
-      - 'TF2PICKUPORG_API_ADDRESS=127.0.0.1:3000'
-      - 'TF2PICKUPORG_SECRET=xxxxxx'
-    network_mode: host
-    stdin_open: true
-    tty: true
-    profiles: [gameserver]
-
-  umami:
-    container_name: umami
-    image: ghcr.io/umami-software/umami:postgresql-latest
-    ports:
-      - '3001:3000'
-    environment:
-      DATABASE_URL: postgresql://umami:umami123@umami-db:5432/umami
-      DATABASE_TYPE: postgresql
-      HASH_SALT: replace-me-with-a-random-string
-    depends_on:
-      - umami-db
-    restart: always
-    profiles: [analytics]
-
-  umami-db:
-    container_name: umami-db
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_DB: umami
-      POSTGRES_USER: umami
-      POSTGRES_PASSWORD: umami123
-    volumes:
-      - umami-db:/var/lib/postgresql/data
-    restart: always
-    profiles: [analytics]
-
-volumes:
-  mongo:
-  umami-db:
+      - '127.0.0.1:3000:3000'

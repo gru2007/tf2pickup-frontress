@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin'
-import type { PlayerRole } from '../../database/models/player.model'
+import type { PlayerRole } from '../player-role'
 
 declare module 'fastify' {
   interface FastifyContextConfig {

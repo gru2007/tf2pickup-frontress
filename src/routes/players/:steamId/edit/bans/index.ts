@@ -1,9 +1,10 @@
-import { PlayerRole } from '../../../../../database/models/player.model'
 import { z } from 'zod'
-import { players } from '../../../../../players'
+import { PlayerRole } from '../../../../../auth/player-role'
 import { steamId64 } from '../../../../../shared/schemas/steam-id-64'
-import { BanDetails, EditPlayerBansPage } from '../../../../../players/views/html/edit-player.page'
+import { EditPlayerBansPage } from '../../../../../players/views/html/edit-player.page'
 import { routes } from '../../../../../utils/routes'
+import { gc } from '../../../../../gc'
+import { promptReason } from '../../../../../utils/prompt-reason'
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export default routes(async app => {
@@ -11,42 +12,29 @@ export default routes(async app => {
     .get(
       '/',
       {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
-        schema: {
-          params: z.object({
-            steamId: steamId64,
-          }),
-        },
+        config: { authorize: [PlayerRole.admin] },
+        schema: { params: z.object({ steamId: steamId64 }) },
       },
       async (req, reply) => {
-        const { steamId } = req.params
-        await reply.status(200).html(EditPlayerBansPage({ steamId }))
+        await reply.status(200).html(EditPlayerBansPage({ steamId: req.params.steamId }))
       },
     )
     .put(
-      '/:banStart/revoke',
+      '/:action',
       {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
+        config: { authorize: [PlayerRole.admin] },
         schema: {
-          params: z.object({
-            steamId: steamId64,
-            banStart: z.coerce.number().transform(value => new Date(value)),
-          }),
+          params: z.object({ steamId: steamId64, action: z.enum(['clear', 'steam_unban']) }),
         },
       },
       async (request, reply) => {
-        const { steamId, banStart } = request.params
-        const player = await players.bySteamId(steamId, ['name', 'steamId'])
-        const ban = await players.revokeBan({
-          player: steamId,
-          banStart,
-          actor: request.user!.player.steamId,
+        const reason = promptReason(request)
+        await gc.antiCheatAction(request.params.steamId, request.user!.player.steamId, {
+          action: request.params.action,
+          reason,
         })
-        await reply.status(200).html(BanDetails({ player, ban }))
+        request.flash('success', 'Ban lifted')
+        await reply.header('HX-Refresh', 'true').status(200).send()
       },
     )
 })

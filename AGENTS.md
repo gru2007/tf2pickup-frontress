@@ -1,106 +1,50 @@
-# tf2pickup.org
+# Team Frontress portal (mm.team-frontress.org)
 
 ## Project Overview
 
-tf2pickup.org — a Team Fortress 2 pick-up game coordination platform. Full-stack Node.js app using Fastify, MongoDB, server-rendered HTML with HTMX.
+The website of Team Frontress, built on tf2pickup.org and keeping its look: the
+admin panel of the Frontress game coordinator (GC) and the place players see
+their accounts. Matches are found in the game, not here. The GC
+(`services/gc` in team-frontress) owns every record; this site has no database
+and no state of its own.
 
 ## Commands
 
-- `pnpm dev` — run dev server with hot reload (tsx --watch)
+- `pnpm dev` — run dev server with hot reload (tsx --watch); needs a GC (`GC_URL`)
 - `pnpm build` — TypeScript compilation + tsc-alias + asset copy to dist/
 - `pnpm lint` — prettier --check + eslint
 - `pnpm format` — prettier --write
 - `pnpm test` — unit tests (vitest, files in src/)
-- `pnpm test -- src/path/to/file.test.ts` — run a single test file
-- `pnpm test:e2e` — Playwright e2e tests (requires running app + mongo)
-- Docker: `docker-compose up -d mongo` to start MongoDB for development
 
 ## Architecture
 
-### Tech Stack
-
 - **Fastify 5** with Zod type provider for request validation
-- **MongoDB** (no ORM — raw driver with typed collections in `src/database/collections.ts`)
-- **@kitajs/html** for type-safe JSX → HTML server rendering
-- **HTMX** for dynamic partial page updates (detects `hx-request` header for fragment responses)
-- **Tailwind CSS 4** via PostCSS, embedded at render time
-- **esbuild** bundles client-side JS from `src/html/@client/`
+- **@kitajs/html** for type-safe JSX → HTML server rendering, **HTMX** for partial updates
+- **Tailwind CSS 4** via PostCSS, embedded at render time; **esbuild** bundles `src/html/@client/`
+- **The GC** is the only data source: `src/gc/index.ts` (calls) and `src/gc/schemas.ts`
+  (Zod schemas of its answers). Admin calls send `GC_ADMIN_KEY` and the acting
+  admin's SteamID (`X-Frontress-Actor`); the GC records both.
+- **Auth**: Steam OpenID (`src/auth/plugins/steam.ts`); the session is an encrypted
+  cookie (`@fastify/secure-session`, `SESSION_SECRET`). Roles come from `ADMINS`
+  and `SUPER_USERS` (`src/auth/roles-of.ts`).
+- **Names and avatars**: Steam web API with an in-memory cache
+  (`src/steam/get-player-summaries.ts`), falling back to the GC's names.
+- **Documents**: rules and privacy policy are `src/documents/default/*.md`.
 
-### Application Startup (`src/main.ts`)
+Routes live in `src/routes/` and are auto-loaded with directory-name prefixes,
+using the `routes()` wrapper from `src/utils/routes.ts`. Views live next to
+their feature (`games/`, `players/`, `admin/`, `hall-of-game/`) under
+`views/html/`.
 
-1. OpenTelemetry init (`src/otel.ts`)
-2. Database migrations via Umzug (`src/migrate.ts`)
-3. Fastify plugin registration (security, session, HTML, websocket)
-4. Auto-load all `**/plugins/**` files, then `**/middleware/**` files, then routes from `src/routes/`
-
-### Module Structure
-
-Feature-driven layout under `src/`. Each module (queue, games, players, admin, etc.) contains:
-
-- Business logic files (e.g., `join.ts`, `leave.ts`)
-- `plugins/` — Fastify plugins auto-loaded at startup (event handlers, hooks)
-- `middleware/` — request middleware auto-loaded at startup
-- `views/html/` — JSX page/component files
-- `schemas/` — Zod validation schemas
-
-### Route Registration
-
-Routes live in `src/routes/` and are auto-loaded by `@fastify/autoload` with directory-name prefixes. Route files export default using the `routes()` wrapper from `src/utils/routes.ts`, which provides the Zod type provider:
-
-```ts
-export default routes(async app => {
-  app.get('/', async (_req, reply) => reply.html(MyPage()))
-})
-```
-
-### Event System
-
-Typed event emitter in `src/events.ts`. Modules communicate via events (e.g., `game:created`, `queue/slots:updated`, `player:connected`). Plugins subscribe to events.
-
-### Client-Side Code
-
-Browser JS lives in `src/html/@client/`. Files are bundled by esbuild and served via the `serve-bundles` plugin. These files use browser globals and HTMX extensions.
-
-### Database
-
-Collections are exported from `src/database/collections.ts` with TypeScript models in `src/database/models/`. Migrations in `src/migrations/` use Umzug.
-
-- Add new DB indexes via `ensureIndexes()` rather than via migrations, unless explicitly told otherwise.
-
-### Environment
-
-All env vars are Zod-validated in `src/environment.ts`. See `sample.env` for available variables. Key ones: `MONGODB_URI`, `STEAM_API_KEY`, `QUEUE_CONFIG` (6v6/9v9/bball/ultiduo/test), `WEBSITE_URL`.
-
-### Observability
-
-OpenTelemetry (`src/otel.ts`) ships metrics (`tf2pickup.*`), logs, and traces to SigNoz at `https://logs.tf2pickup.org` (`SIGNOZ_API_KEY` in `.env`). To query it from the CLI — investigate errors/latency, search logs, or build dashboards/alerts — use the `signoz-query` skill (`.claude/skills/signoz-query/SKILL.md`).
-
-There are three instrumentation channels — **OTel/SigNoz** (operational metrics/logs/traces for instances we host), **Umami** (per-instance, in-browser product analytics, via `data-umami-event` tags), and **tf2pickup telemetry** (anonymous cross-instance feature-adoption snapshot built in `src/telemetry/build-snapshot.ts`). See [docs/observability.md](docs/observability.md) for what belongs in each and a decision framework.
+Prefer adapting an existing tf2pickup page or component over adding a new one.
 
 ## Conventions
 
-- **One export per file** — the exported function name must match the file name (e.g., `foo-bar.ts` → `export function fooBar()`)
-- **Conventional commits** for PR titles and commit messages (check git log for examples)
-- **Use date-fns helpers** for time durations instead of raw numbers (e.g., `secondsToMilliseconds(1)` not `1000`)
-- **camelCase for constants** — never `UPPER_CASE`/`SCREAMING_SNAKE_CASE`, even for module-level or "global" consts (e.g., `const maxRetries = 3` not `const MAX_RETRIES = 3`)
-- **Strict TypeScript** — project uses `@tsconfig/strictest`
-- **ESM only** — `"type": "module"` in package.json
-- **pnpm** as package manager
-- **Adapt external code** — when integrating external/third-party code, adapt it to tf2pickup's coding style and idioms rather than vendoring it wholesale.
-- **Instrument new features when applicable** — consider whether a new feature warrants telemetry or metrics, and route it to the right channel per [docs/observability.md](docs/observability.md): a config/feature flag → add an entry to `src/telemetry/build-snapshot.ts` (anonymous cross-instance adoption); a user-facing interaction → a `data-umami-event` tag; operational health/outcomes → OTel metrics/logs. Skip it when none of these fit.
+- **One export per file** where practical — the exported name matches the file name
+- **Conventional commits**
+- **date-fns** helpers for durations; **camelCase** constants
+- **Strict TypeScript** (`@tsconfig/strictest`), **ESM only**, **pnpm**
 
-## Development Environment
+## Testing
 
-Before starting a dev server or MongoDB, check whether one is already running (e.g., check ports 3000/27017) and reuse it rather than spawning your own.
-
-## Dependencies & Imports
-
-When importing dependencies in production code paths, verify the package is a runtime dependency (not a `devDependency`), and prefer lazy imports for optional/dev-only modules. Avoid barrel imports that pull in `environment.ts`.
-
-## Transparency / Working Style
-
-Always disclose any non-obvious transformation of assets or data (e.g., upscaling an image, modifying inputs) instead of doing it silently.
-
-## Testing & CI
-
-After any change, run lint, typecheck, and tests, and watch CI until it is fully green before considering a PR done.
+After any change, run lint, typecheck and tests.

@@ -1,63 +1,51 @@
 import { format } from 'date-fns'
-import { GameState, type GameModel } from '../../../database/models/game.model'
+import type { GcMatch } from '../../../gc/schemas'
 import { GameClassIcon } from '../../../html/components/game-class-icon'
 import { GameLiveIndicator } from '../../../html/components/game-live-indicator'
 import { MapThumbnail } from '../../../html/components/map-thumbnail'
 import type { Tf2ClassName } from '../../../shared/types/tf2-class-name'
-import type { PickDeep } from 'type-fest'
 
-export function GameListItem(props: {
-  game: PickDeep<GameModel, 'number' | 'state' | 'events.0' | 'score' | 'map'>
-  classPlayed?: Tf2ClassName
-}) {
-  const isRunning = [
-    GameState.created,
-    GameState.configuring,
-    GameState.launching,
-    GameState.started,
-  ].includes(props.game.state)
-
-  const launchedAt = props.game.events[0].at
+export function GameListItem(props: { game: GcMatch; classPlayed?: Tf2ClassName | undefined }) {
+  const isRunning = props.game.state !== 'ended'
+  const result = props.game.result
 
   let gameLabel = <div class="col-span-2"></div>
-  if (props.game.state === GameState.interrupted) {
-    gameLabel = (
-      <div class="game-list-label" data-state="interrupted">
-        force-ended
-      </div>
-    )
-  } else if (props.game.score?.blu !== undefined) {
+  if (result) {
     gameLabel = (
       <>
         <div class="game-list-label tabular-nums" data-team="blu">
-          blu: {props.game.score.blu}
+          blu: {result.blue_score}
         </div>
         <div class="game-list-label tabular-nums" data-team="red">
-          red: {props.game.score.red}
+          red: {result.red_score}
         </div>
       </>
     )
-  } else if (
-    [GameState.created, GameState.configuring, GameState.launching].includes(props.game.state)
-  ) {
+  } else if (props.game.state === 'ended') {
+    gameLabel = (
+      <div class="game-list-label" data-state="interrupted">
+        no result
+      </div>
+    )
+  } else if (props.game.state === 'setup') {
     gameLabel = (
       <div class="game-list-label" data-state="launching">
-        {props.game.state}
+        launching
       </div>
     )
   }
 
   return (
-    <a class="game-list-item" href={`/games/${props.game.number}`} preload="mousedown">
+    <a class="game-list-item" href={`/games/${props.game.match_id}`} preload="mousedown">
       <div class="live-indicator">{isRunning ? <GameLiveIndicator /> : <></>}</div>
       <span class={['game-number', isRunning && 'text-accent', 'tabular-nums']} safe>
-        #{props.game.number}
+        {props.game.group_name}
       </span>
       <span class="map-name" safe>
         {props.game.map}
       </span>
       <span class="launched-at" safe>
-        {format(launchedAt, 'dd.MM.yyyy HH:mm')}
+        {format(props.game.started_at ?? props.game.formed_at, 'dd.MM.yyyy HH:mm')}
       </span>
 
       <div class="game-class-icon">

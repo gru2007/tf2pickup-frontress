@@ -1,65 +1,61 @@
 <h1 align="center">
-  <a href="https://tf2pickup.pl">
-    <img src="images/readme/github-logo.png" alt="tf2pickup.org logo" width="128" height="128">
-  </a>
+  <img src="public/logo.png" alt="Team Frontress" height="80">
 </h1>
 
-<h3 align="center">tf2pickup.org</h3>
+<h3 align="center">mm.team-frontress.org</h3>
 
-<p align="center">
-  <a href="https://github.com/tf2pickup-org/tf2pickup/actions/workflows/test.yml">
-    <img src="https://github.com/tf2pickup-org/tf2pickup/actions/workflows/test.yml/badge.svg" alt="Test status">
-  </a>
+The website of [Team Frontress](https://github.com/gru2007/team-frontress): the
+admin panel of the Frontress game coordinator, and where players see their
+accounts. It is built on [tf2pickup.org](https://github.com/tf2pickup-org/tf2pickup)
+and keeps its look; the pick-up system itself is gone.
 
-  <a href="https://opensource.org/licenses/MIT">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license">
-  </a>
-</p>
+## What it is
 
-<p align="center">
-  <a href="https://docs.tf2pickup.org/"><strong>Documentation »</strong></a>
-</p>
+Matches are found in the game. The game coordinator (`services/gc` in
+team-frontress) forms the teams, runs the server pool and keeps every record:
+players, matches, bans, reports, payments. This site keeps nothing of its own
+— no database. Every page asks the coordinator when it is opened, and every
+admin action is a call to the coordinator's admin API, recorded there with the
+admin's SteamID and a reason.
 
-<br />
+| Page                                                                                                             | From the coordinator                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`, `/games`, `/games/:id`                                                                                      | `/v1/status`, `/v1/matches`, `/v1/matches/{id}`                                                                                      |
+| `/players`, `/hall-of-fame`                                                                                      | `/v1/players`                                                                                                                        |
+| `/players/:steamId`                                                                                              | `/v1/player/{id}`, `/v1/matches?steam_id=`                                                                                           |
+| own profile: account                                                                                             | `/admin/v1/anticheat/{id}`, `/v1/player/{id}/quests`, orders                                                                         |
+| `/players/:steamId/edit/bans`                                                                                    | `/admin/v1/anticheat/{id}` (ban, lift, Steam ban)                                                                                    |
+| `/players/:steamId/edit/reports`                                                                                 | `/admin/v1/reports/{id}` (ban, dismiss)                                                                                              |
+| `/admin/game-servers`, `/admin/games`                                                                            | `/admin/v1/live`; force-end: `/admin/v1/matches/{id}/end`                                                                            |
+| `/admin/reports`                                                                                                 | `/admin/v1/reports`                                                                                                                  |
+| `/admin/player-restrictions`                                                                                     | `/admin/v1/anticheat`                                                                                                                |
+| `/admin/payments`                                                                                                | `/admin/v1/payments` (refund, cancel renewal)                                                                                        |
+| `/admin/games`, `/admin/map-pool`, `/admin/player-restrictions`, `/admin/miscellaneous`, `/admin/view-for-nerds` | `/admin/v1/settings`: queues, maps, restrictions, chat, regions and ping, Easy Anti-Cheat, deadlines, webhooks, raw JSON and history |
+| `/admin/game-servers` (keys)                                                                                     | `/admin/v1/server-keys` (create, rotate, revoke)                                                                                     |
+| `/admin/logs`                                                                                                    | `/admin/v1/journal`: what the GC logged per player, server, match                                                                    |
 
-tf2pickup.org was created with a simple objective in mind. Make it as easy and accessible for twelve players to play a 6v6 pick-up game in Team Fortress 2 as possible.
+Settings are changed by super users; moderators see them read-only. A save
+goes to the coordinator, which validates it, applies it at once and keeps it
+in its `data/settings.json` (over `gc.json`) with a history of who changed
+what.
 
-## Local deployment
+Players sign in through Steam. The session is an encrypted cookie with the
+SteamID, the Steam name and the avatar. Who is an admin comes from `ADMINS`
+and `SUPER_USERS`; the coordinator trusts this site's admin key, so keep the
+key on this server only. Rules and the privacy policy are
+`src/documents/default/*.md`.
 
-### Setup
-
-- Clone the repository or download a zipped release of your choice
-- Open the terminal inside the repository folder
-- Install the dependencies
-
-  ```bash
-  $ pnpm install
-  ```
-
-- Copy and rename `sample.env` to `.env` and adjust your environment values, mainly:
-  - `STEAM_API_KEY` - your [Steam API key](https://steamcommunity.com/dev/apikey), the "Domain Name" can be set to anything you like,
-  - `LOGS_TF_API_KEY` - your [logs.tf API key](https://logs.tf/uploader),
-  - `SUPER_USER` - your SteamID64,
-  - `LOG_RELAY_ADDRESS` - your IP address in the local network.
-
-### Deployment
-
-- Start the required services
-
-  ```bash
-  $ docker-compose up -d
-  ```
-
-- Finally, run the server in development mode
-
-  ```bash
-  $ pnpm dev
-  ```
-
-  By default, the server is listening on port 3000 .
-
-## Docker images
+## Running it
 
 ```bash
-$ docker pull ghcr.io/tf2pickup-org/tf2pickup:latest
+pnpm install
+cp sample.env .env   # set GC_URL, GC_ADMIN_KEY, SESSION_SECRET, ADMINS
+pnpm dev             # http://localhost:3000
 ```
+
+A coordinator to work against: `go run ./cmd/frontress-gc -config gc.json` in
+team-frontress `services/gc` with `auth.mode` `dev` and an `admin_key`.
+
+Docker: `docker compose up -d --build` with the same `.env`.
+
+`pnpm lint`, `pnpm test`, `pnpm build`.

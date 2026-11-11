@@ -1,64 +1,53 @@
 import { z } from 'zod'
 import dotenv from 'dotenv'
-import { KnownEndpoint } from '@tf2pickup-org/serveme-tf-client'
-import { steamId64 } from './shared/schemas/steam-id-64'
 
 dotenv.config()
 
+const steamIdList = z
+  .string()
+  .default('')
+  .transform(value =>
+    value
+      .split(',')
+      .map(id => id.trim())
+      .filter(id => /^[0-9]{17}$/.test(id)),
+  )
+
 const environmentSchema = z.object({
   NODE_ENV: z.string().default('development'),
-  CI: z
-    .string()
-    .default('false')
-    .transform(value => ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase())),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   APP_HOST: z.string().default('localhost'),
   APP_PORT: z.coerce.number().default(3000),
   TRUST_PROXY: z.string().default('loopback, uniquelocal'),
 
-  ENABLE_TEST_AUTH: z.enum(['true', 'false']).default('false'),
-  TEST_AUTH_SECRET: z.string().min(32).optional(),
+  WEBSITE_URL: z.url().default('https://mm.team-frontress.org'),
+  WEBSITE_NAME: z.string().default('Team Frontress'),
 
-  WEBSITE_URL: z.url(),
-  WEBSITE_NAME: z.string().default('tf2pickup.org'),
-  WEBSITE_BRANDING: z.string().optional(),
-  MONGODB_URI: z.url(),
-  SUPER_USER: steamId64.optional(),
-  STEAM_API_KEY: z.string(),
-  QUEUE_CONFIG: z.enum(['6v6', '9v9', 'ultiduo']).default('6v6'),
-  KEY_STORE_PASSPHRASE: z.string(),
-  LOG_RELAY_ADDRESS: z.string(),
-  LOG_RELAY_PORT: z.coerce.number(),
-  LOGS_TF_API_KEY: z.string().optional(),
-  GAME_SERVER_SECRET: z.string(),
+  // Signs the session cookie. Keep it secret and stable: changing it signs everybody out.
+  SESSION_SECRET: z.string().min(32),
+
+  // Optional: names and avatars come from Steam with it; without it the
+  // coordinator's names and a default avatar are shown.
+  STEAM_API_KEY: z.string().optional(),
+
+  // The Frontress game coordinator: everything this site shows comes from it.
+  GC_URL: z.url(),
+  // The coordinator's admin key (gc.json admin_key / $GC_ADMIN_KEY). Without it
+  // the admin panel and the private part of the player's own profile are off.
+  GC_ADMIN_KEY: z.string().optional(),
+  // The coordinator's address as game servers reach it (tf_gc_server_url),
+  // shown with a new server key. Default: GC_URL.
+  GC_PUBLIC_URL: z.url().optional(),
+
+  // Who may moderate (ban, review reports, end matches) and who may also
+  // handle payments. SteamID64s, comma-separated.
+  ADMINS: steamIdList,
+  SUPER_USERS: steamIdList,
+
   THUMBNAIL_SERVICE_URL: z.url().default('https://mapthumbnails.tf2pickup.org'),
-
-  ATLAS_URL: z.url().default('https://atlas.tf2pickup.org'),
-  ATLAS_SECRET: z.string().optional(),
-
-  TELEMETRY_URL: z.url().default('https://telemetry.tf2pickup.org'),
-  TELEMETRY_DISABLED: z
-    .string()
-    .default('false')
-    .transform(value => ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase())),
-
-  SERVEME_TF_API_ENDPOINT: z.string().default(KnownEndpoint.europe),
-  SERVEME_TF_API_KEY: z.string().optional(),
-
-  ETF2L_API_ENDPOINT: z.url().default('https://api.etf2l.org'),
-
-  TF2_QUICK_SERVER_CLIENT_ID: z.string().optional(),
-  TF2_QUICK_SERVER_CLIENT_SECRET: z.string().optional(),
-
-  DISCORD_BOT_TOKEN: z.string().optional(),
-
-  TWITCH_CLIENT_ID: z.string().optional(),
-  TWITCH_CLIENT_SECRET: z.string().optional(),
-
-  UMAMI_SCRIPT_SRC: z.string().optional(),
-  UMAMI_WEBSITE_ID: z.string().optional(),
-  UMAMI_RECORDER_SCRIPT_SRC: z.string().optional(),
-  UMAMI_TRACK_PERFORMANCE: z.enum(['true', 'false']).default('false'),
+  // Where players get the game.
+  DOWNLOAD_URL: z.url().optional(),
+  DISCORD_INVITE_URL: z.url().optional(),
 })
 
 export const environment = environmentSchema.parse(process.env)

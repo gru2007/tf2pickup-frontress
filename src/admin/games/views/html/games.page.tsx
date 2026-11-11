@@ -1,207 +1,116 @@
-import { millisecondsToSeconds } from 'date-fns'
-import { configuration } from '../../../../configuration'
-import { IconMinus, IconPlus } from '../../../../html/components/icons'
-import { LogsTfUploadMethod } from '../../../../shared/types/logs-tf-upload-method'
+import { formatDistanceToNowStrict } from 'date-fns'
+import { gc } from '../../../../gc'
 import { Admin } from '../../../views/html/admin'
-import { SaveButton } from '../../../views/html/save-button'
-import { durationUnit } from '../../duration-unit'
-import { GameServerCommandPreview } from './game-server-command-preview'
+import { AdminCell, AdminTable } from '../../../views/html/admin-table'
+import { PlayerLink } from '../../../../html/components/player-link'
+import { MatchGroupSettings } from './match-group-settings'
 
+// Running matches, who stands in which queue, and the queues themselves.
+// Below them, the queues' settings, saved to the coordinator.
 export async function GamesPage() {
-  const whitelistId = await configuration.get('games.whitelist_id')
-  const joinGameServerTimeout = await configuration.get('games.join_gameserver_timeout')
-  const rejoinGameServerTimeout = await configuration.get('games.rejoin_gameserver_timeout')
-  const executeExtraCommands = await configuration.get('games.execute_extra_commands')
-  const logsTfUploadMethod = await configuration.get('games.logs_tf_upload_method')
-  const cooldownLevels = await configuration.get('games.cooldown_levels')
-
-  const safeExecuteExtraCommands = executeExtraCommands.join('\n')
-
+  const [live, settings] = await Promise.all([gc.live(), gc.settings()])
+  const groups = live.status?.groups ?? []
+  const groupName = new Map(groups.map(g => [String(g.match_group), g.name]))
   return (
     <Admin activePage="games">
-      <form action="" method="post">
-        <div class="admin-panel-set flex flex-col gap-4">
-          <dl>
-            <dt>
-              <label for="whitelistId">Whitelist ID</label>
-            </dt>
-            <dd>
-              <input
-                type="text"
-                name="whitelistId"
-                value={whitelistId ?? ''}
-                id="whitelistId"
-                class="col-span-3"
-              />
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>
-              <label for="joinGameserverTimeout">Join gameserver timeout</label>
-            </dt>
-            <dd class="flex flex-col">
-              <div>
-                <input
-                  type="number"
-                  name="joinGameserverTimeout"
-                  value={millisecondsToSeconds(joinGameServerTimeout).toString()}
-                  id="joinGameserverTimeout"
-                  class="col-span-2 me-2"
-                />
-                <span class="text-white">seconds</span>
-              </div>
-              <span class="text-abru-light-75 text-sm">
-                The time a player has to join the gameserver before they are getting subbed
-                automatically. Use 0 to disable.
-              </span>
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>
-              <label for="rejoinGameserverTimeout">Rejoin gameserver timeout</label>
-            </dt>
-            <dd class="flex flex-col">
-              <div>
-                <input
-                  type="number"
-                  name="rejoinGameserverTimeout"
-                  value={millisecondsToSeconds(rejoinGameServerTimeout).toString()}
-                  id="rejoinGameserverTimeout"
-                  class="col-span-2 me-2"
-                />
-                <span class="text-white">seconds</span>
-              </div>
-              <span class="text-abru-light-75 text-sm">
-                The time a player has to come back to the gameserver after they go offline during
-                the match. Use 0 to disable.
-              </span>
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>
-              <label for="executeExtraCommands">Execute extra commands</label>
-            </dt>
-            <dd class="flex flex-col">
-              <textarea rows="3" id="executeExtraCommands" name="executeExtraCommands">
-                {safeExecuteExtraCommands}
-              </textarea>
-              <span class="text-abru-light-75 text-sm">
-                Extra commands to execute on the gameserver before the match starts. One command per
-                line.
-              </span>
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>
-              <label for="logsTfUploadMethod">logs.tf upload method</label>
-            </dt>
-            <dd>
-              <select name="logsTfUploadMethod" id="logsTfUploadMethod">
-                <option value="off" selected={logsTfUploadMethod === LogsTfUploadMethod.off}>
-                  Off - no logs will be uploaded to logs.tf
-                </option>
-                <option
-                  value="backend"
-                  selected={logsTfUploadMethod === LogsTfUploadMethod.backend}
-                >
-                  Backend - logs will be uploaded by the tf2pickup.org server only
-                </option>
-                <option
-                  value="gameserver"
-                  selected={logsTfUploadMethod === LogsTfUploadMethod.gameserver}
-                >
-                  Gameserver - logs will be uploaded by the logs.tf sourcemod plugin
-                </option>
-              </select>
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>Game server startup commands</dt>
-            <dd class="flex flex-col">
-              <GameServerCommandPreview
-                whitelistId={whitelistId}
-                executeExtraCommands={executeExtraCommands}
-                logsTfUploadMethod={logsTfUploadMethod}
-              />
-              <span class="text-abru-light-75 text-sm">
-                Commands executed on the game server when a game starts, in order. Reflects the
-                saved configuration above.
-              </span>
-            </dd>
-          </dl>
-
-          <dl>
-            <dt>Cooldown levels</dt>
-            <dd class="flex flex-col gap-2">
-              <div class="cooldown-levels-list flex flex-col gap-2" id="cooldownLevelsList">
-                {cooldownLevels.map(({ banLengthMs }) => (
-                  <CooldownLevelEntry banLengthMs={banLengthMs} />
-                ))}
-              </div>
-              <button
-                type="button"
-                class="flex w-fit flex-row items-center gap-2 text-white hover:underline"
-                data-umami-event="add-cooldown-level"
-                hx-post="/admin/games/cooldown-level"
-                hx-trigger="click"
-                hx-target="#cooldownLevelsList"
-                hx-swap="beforeend"
-              >
-                <IconPlus />
-                Add level
-              </button>
-              <span class="text-abru-light-75 text-sm">
-                When a player is subbed out of a game, they receive a ban. The ban length grows with
-                each offence, following the levels above. Levels are applied top to bottom; a player
-                past the last level always gets the last ban length.
-              </span>
-            </dd>
-          </dl>
-
-          <p class="mt-2">
-            <SaveButton />
-          </p>
+      <div class="admin-panel-set">
+        <h4 class="pb-4">Running games</h4>
+        <div class="max-lg:overflow-x-auto">
+          <AdminTable head={['Game', 'Queue', 'Map', 'State', 'Server', 'Players', 'Running for']}>
+            {live.matches.map(match => (
+              <tr>
+                <AdminCell bold>
+                  <a href={`/games/${match.match_id}`} class="underline" safe>
+                    {match.match_id}
+                  </a>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{match.group_name}</span>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{match.map}</span>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{match.state}</span>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{match.server || '—'}</span>
+                </AdminCell>
+                <AdminCell>
+                  <span
+                    safe
+                  >{`${match.members.filter(m => m.connect === 'connected').length}/${match.members.length} connected`}</span>
+                </AdminCell>
+                <AdminCell>
+                  <span safe>{formatDistanceToNowStrict(match.started_at ?? match.formed_at)}</span>
+                </AdminCell>
+              </tr>
+            ))}
+          </AdminTable>
+          {live.matches.length === 0 && (
+            <p class="text-abru-light-75 mt-4 italic">No game is running.</p>
+          )}
         </div>
-      </form>
+      </div>
+
+      <div class="admin-panel-set mt-4">
+        <h4 class="pb-4">Queues</h4>
+        <AdminTable
+          head={['Queue', 'Mode', 'Searching', 'Needed', 'Ideal', 'Max', 'Running', 'Maps']}
+        >
+          {groups.map(group => (
+            <tr>
+              <AdminCell bold>
+                <span safe>{group.name}</span>
+              </AdminCell>
+              <AdminCell>
+                <span safe>{group.mode}</span>
+              </AdminCell>
+              <AdminCell>{group.queued}</AdminCell>
+              <AdminCell>{group.need}</AdminCell>
+              <AdminCell>{group.ideal}</AdminCell>
+              <AdminCell>{group.max}</AdminCell>
+              <AdminCell>{group.matches}</AdminCell>
+              <AdminCell class="text-xs">
+                <a href="/admin/map-pool" class="underline" title={(group.maps ?? []).join(', ')}>
+                  {`${(group.maps ?? []).length} maps`}
+                </a>
+              </AdminCell>
+            </tr>
+          ))}
+        </AdminTable>
+      </div>
+
+      <div class="admin-panel-set mt-4">
+        <h4 class="pb-4">Searching parties</h4>
+        <AdminTable head={['Party', 'Players', 'Waiting']}>
+          {live.parties.map(party => (
+            <tr>
+              <AdminCell>
+                <span safe>{party.id}</span>
+              </AdminCell>
+              <AdminCell>
+                <div class="flex flex-row flex-wrap gap-x-3">
+                  {(party.members ?? []).map(m => (
+                    <PlayerLink steamId={m.steam_id} name={m.name} class="underline" />
+                  ))}
+                </div>
+              </AdminCell>
+              <AdminCell>
+                <span safe>
+                  {Object.entries(party.queues)
+                    .map(([g, secs]) => `${groupName.get(g) ?? g}: ${Math.round(secs / 60)} min`)
+                    .join(', ')}
+                </span>
+              </AdminCell>
+            </tr>
+          ))}
+        </AdminTable>
+        {live.parties.length === 0 && (
+          <p class="text-abru-light-75 mt-4 italic">Nobody is searching.</p>
+        )}
+      </div>
+      <MatchGroupSettings settings={settings.settings} />
     </Admin>
-  )
-}
-
-export function CooldownLevelEntry(props: { banLengthMs: number }) {
-  const { value, unit } = durationUnit.split(props.banLengthMs)
-
-  return (
-    <div class="cooldown-level-row flex flex-row items-center gap-2">
-      <span class="cooldown-level-index text-abru-light-75 w-6 shrink-0 text-end tabular-nums" />
-      <input
-        type="number"
-        name="banLength[]"
-        value={value.toString()}
-        min="0"
-        step="any"
-        required
-        class="w-24 min-w-0"
-      />
-      <select name="banLengthUnit[]" class="w-28 shrink-0">
-        {durationUnit.all.map(u => (
-          <option value={u} selected={u === unit}>
-            {u}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        class="text-abru-light-75 shrink-0 hover:text-white"
-        aria-label="Remove level"
-        data-remove-closest=".cooldown-level-row"
-      >
-        <IconMinus />
-      </button>
-    </div>
   )
 }

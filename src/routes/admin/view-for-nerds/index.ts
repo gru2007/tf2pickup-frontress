@@ -1,85 +1,42 @@
-import { PlayerRole } from '../../../database/models/player.model'
-import {
-  ConfigurationEntryEdit,
-  ViewForNerdsPage,
-} from '../../../admin/view-for-nerds/views/html/view-for-nerds.page'
 import { z } from 'zod'
+import { PlayerRole } from '../../../auth/player-role'
 import {
-  configurationSchema,
-  type Configuration,
-} from '../../../database/models/configuration-entry.model'
-import { configuration } from '../../../configuration'
+  ViewForNerdsPage,
+  rawSections,
+} from '../../../admin/view-for-nerds/views/html/view-for-nerds.page'
 import { routes } from '../../../utils/routes'
+import { saveSettings } from '../../../admin/save-settings'
+import { formValues } from '../../../admin/form-values'
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export default routes(async app => {
   app
-    .get(
-      '/',
-      {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
-      },
-      async (_request, reply) => {
-        await reply.html(ViewForNerdsPage())
-      },
-    )
+    .get('/', { config: { authorize: [PlayerRole.admin] } }, async (_request, reply) => {
+      await reply.status(200).html(ViewForNerdsPage())
+    })
     .post(
-      '/',
+      '/:section',
       {
-        config: { authorize: [PlayerRole.admin] },
+        config: { authorize: [PlayerRole.superUser] },
         schema: {
-          body: z
-            .object({
-              key: z.string(),
-              value: z.string(),
-            })
-            .transform(({ key, value }, ctx) => {
-              try {
-                const parsed = JSON.parse(value) as unknown
-                const result: unknown = { key, value: parsed }
-                return result
-              } catch (e) {
-                ctx.issues.push({
-                  code: 'custom',
-                  message: `Invalid JSON (${String(e)})`,
-                  input: value,
-                })
-                return z.NEVER
-              }
-            })
-            .pipe(configurationSchema),
+          params: z.object({ section: z.enum(rawSections) }),
+          body: z.record(z.string(), z.unknown()),
         },
       },
       async (request, reply) => {
-        const { key, value } = request.body
-        await configuration.set(key, value, request.user!.player.steamId)
-        const defaultValue = configuration.getDefault(key)
-        await reply.html(ConfigurationEntryEdit({ _key: key, value, defaultValue }))
-      },
-    )
-    .delete(
-      '/',
-      {
-        config: {
-          authorize: [PlayerRole.admin],
-        },
-        schema: {
-          querystring: z.object({
-            key: z.custom<keyof Configuration>(v =>
-              configurationSchema.options.find(
-                option => option._zod.def.shape.key._zod.def.values[0] === v,
-              ),
-            ),
-          }),
-        },
-      },
-      async (request, reply) => {
-        const { key } = request.query
-        const value = await configuration.reset(key, request.user!.player.steamId)
-        const defaultValue = configuration.getDefault(key)
-        await reply.html(ConfigurationEntryEdit({ _key: key, value, defaultValue }))
+        let value: unknown
+        try {
+          value = JSON.parse(formValues.raw(request.body['value']))
+        } catch (error) {
+          request.flash('error', `Not JSON: ${(error as Error).message}`)
+          return reply.redirect('/admin/view-for-nerds')
+        }
+        return saveSettings(request, reply, {
+          revision: formValues.number(request.body['revision']),
+          sections: { [request.params.section]: value },
+          note: `${request.params.section} (raw)`,
+          back: '/admin/view-for-nerds',
+        })
       },
     )
 })

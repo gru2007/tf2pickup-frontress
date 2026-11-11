@@ -1,14 +1,12 @@
 import { requestContext } from '@fastify/request-context'
-import { collections } from '../../database/collections'
-import { GameState } from '../../database/models/game.model'
+import { gc } from '../../gc'
 import { GameLiveIndicator } from './game-live-indicator'
 
 export async function GamesLink() {
-  const gamesLiveCount = await collections.games.countDocuments({
-    state: {
-      $in: [GameState.created, GameState.configuring, GameState.launching, GameState.started],
-    },
-  })
+  const gamesLiveCount = await gc
+    .status()
+    .then(status => status.live_matches)
+    .catch(() => 0)
   const url = requestContext.get('url')
   return (
     <a

@@ -1,8 +1,4 @@
 import { resolve } from 'node:path'
-import { format } from 'date-fns'
-import type { PickDeep } from 'type-fest'
-import { collections } from '../../../database/collections'
-import { PlayerRole, type PlayerModel } from '../../../database/models/player.model'
 import { environment } from '../../../environment'
 import { Footer } from '../../../html/components/footer'
 import { NavigationBar } from '../../../html/components/navigation-bar'
@@ -10,44 +6,35 @@ import { Page } from '../../../html/components/page'
 import { Layout } from '../../../html/layout'
 import { makeTitle } from '../../../html/make-title'
 import { playerAvatarUrl } from '../../../shared/player-avatar-url'
+import { PlayerRole } from '../../../auth/player-role'
+import { rolesOf } from '../../../auth/roles-of'
+import { gc } from '../../../gc'
+import { getPlayerSummaries } from '../../../steam/get-player-summaries'
+import type { SteamId64 } from '../../../shared/types/steam-id-64'
+import { firstNonEmpty } from '../../../utils/first-non-empty'
 
-type StaffMember = PickDeep<
-  PlayerModel,
-  'steamId' | 'name' | 'avatar' | 'roles' | 'joinedAt' | 'stats.totalGames'
->
+interface StaffMember {
+  steamId: SteamId64
+  name: string
+  avatar: { large: string } | undefined
+  roles: PlayerRole[]
+  matches: number
+}
 
 export async function StaffPage() {
-  const staff = await collections.players
-    .find<StaffMember>(
-      { roles: { $in: [PlayerRole.superUser, PlayerRole.admin] } },
-      {
-        projection: {
-          _id: 0,
-          steamId: 1,
-          name: 1,
-          avatar: 1,
-          roles: 1,
-          joinedAt: 1,
-          'stats.totalGames': 1,
-        },
-      },
-    )
-    .toArray()
-  staff.sort((a, b) => {
-    const aSuperUser = a.roles.includes(PlayerRole.superUser)
-    const bSuperUser = b.roles.includes(PlayerRole.superUser)
-    if (aSuperUser !== bSuperUser) {
-      return aSuperUser ? -1 : 1
-    }
-    return a.joinedAt.getTime() - b.joinedAt.getTime()
-  })
-
-  const onlineSteamIds = new Set(
-    (
-      await collections.onlinePlayers
-        .find({ steamId: { $in: staff.map(({ steamId }) => steamId) } })
-        .toArray()
-    ).map(({ steamId }) => steamId),
+  const ids = [...new Set([...environment.SUPER_USERS, ...environment.ADMINS])] as SteamId64[]
+  const summaries = await getPlayerSummaries(ids)
+  const staff: StaffMember[] = await Promise.all(
+    ids.map(async steamId => {
+      const record = await gc.player(steamId).catch(() => null)
+      return {
+        steamId,
+        name: firstNonEmpty(summaries.get(steamId)?.name, record?.name) ?? steamId,
+        avatar: summaries.get(steamId)?.avatar,
+        roles: rolesOf(steamId),
+        matches: record?.matches ?? 0,
+      }
+    }),
   )
 
   return (
@@ -69,7 +56,7 @@ export async function StaffPage() {
 
           <div class="staff-list">
             {staff.map(member => (
-              <StaffCard member={member} isOnline={onlineSteamIds.has(member.steamId)} />
+              <StaffCard member={member} />
             ))}
           </div>
         </div>
@@ -79,7 +66,7 @@ export async function StaffPage() {
   )
 }
 
-function StaffCard(props: { member: StaffMember; isOnline: boolean }) {
+function StaffCard(props: { member: StaffMember }) {
   const { member } = props
   const isSuperUser = member.roles.includes(PlayerRole.superUser)
   return (
@@ -96,7 +83,6 @@ function StaffCard(props: { member: StaffMember; isOnline: boolean }) {
           class="staff-avatar"
           alt={`${member.name}'s avatar`}
         />
-        {props.isOnline && <span class="online-dot" title="online now"></span>}
       </div>
 
       <div class="flex min-w-0 flex-col items-start gap-1">
@@ -112,10 +98,7 @@ function StaffCard(props: { member: StaffMember; isOnline: boolean }) {
             admin
           </span>
         )}
-        <span class="mt-1 text-sm font-light" safe>
-          since {format(member.joinedAt, 'MMMM yyyy')}
-        </span>
-        <span class="text-sm font-light">{member.stats.totalGames} games played</span>
+        <span class="mt-1 text-sm font-light">{member.matches} matches played</span>
       </div>
     </a>
   )

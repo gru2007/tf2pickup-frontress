@@ -1,16 +1,11 @@
-import type { PickDeep } from 'type-fest'
-import type { PlayerModel } from '../../database/models/player.model'
+import type { SteamId64 } from '../../shared/types/steam-id-64'
+import type { PlayerRole } from '../player-role'
 
 export interface User {
-  player: PickDeep<
-    PlayerModel,
-    | 'steamId'
-    | 'roles'
-    | 'avatar.medium'
-    | 'name'
-    | 'preferences.soundVolume'
-    | 'hasAcceptedRules'
-    | 'activeGame'
-    | 'twitchTvProfile'
-  >
+  player: {
+    steamId: SteamId64
+    name: string
+    avatar: { medium: string }
+    roles: PlayerRole[]
+  }
 }
