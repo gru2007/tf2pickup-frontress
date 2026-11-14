@@ -117,6 +117,32 @@ export const gc = {
   quests: (steamId: SteamId64) => request(gcSchemas.quests, `/v1/player/${steamId}/quests`),
 
   // admin
+  clanModeration: () => request(gcSchemas.clanModeration, '/admin/v1/clans', { admin: true }),
+  moderateClan: (
+    clanId: string,
+    actor: SteamId64,
+    body: { action: 'ban' | 'delete' | 'unban'; reason: string; restrict_members: boolean },
+  ) =>
+    request(gcSchemas.ok, `/admin/v1/clans/${encodeURIComponent(clanId)}`, {
+      admin: true,
+      method: 'POST',
+      actor,
+      body,
+    }),
+  moderatePlayer: (
+    steamId: SteamId64,
+    actor: SteamId64,
+    body: {
+      action: 'restrict_creation' | 'allow_creation' | 'mute' | 'unmute' | 'clear_chat'
+      reason: string
+    },
+  ) =>
+    request(gcSchemas.ok, `/admin/v1/players/${steamId}/moderation`, {
+      admin: true,
+      method: 'POST',
+      actor,
+      body,
+    }),
   live: () => request(gcSchemas.live, '/admin/v1/live', { admin: true }),
   endMatch: (matchId: string, actor: SteamId64, reason: string) =>
     request(gcSchemas.ok, `/admin/v1/matches/${encodeURIComponent(matchId)}/end`, {

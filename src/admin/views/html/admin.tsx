@@ -58,6 +58,11 @@ const adminPages = {
     icon: IconAlertSquareRounded,
     section: 'Moderation',
   },
+  moderation: {
+    title: 'Clans and users',
+    icon: IconUserExclamation,
+    section: 'Moderation',
+  },
   'player-restrictions': {
     title: 'Player restrictions',
     icon: IconUserExclamation,

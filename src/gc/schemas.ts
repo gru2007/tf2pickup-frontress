@@ -507,7 +507,49 @@ const journal = z.object({
   dropped: z.number(),
 })
 
+const clanModerationMember = z.object({
+  steam_id: z.string(),
+  name: z.string(),
+  role: z.string(),
+})
+
+const clanModerationAction = z.object({
+  action: z.string(),
+  clan: z.string().optional(),
+  steam_id: z.string().optional(),
+  actor: z.string(),
+  reason: z.string(),
+  at: date,
+  restrict_members: z.boolean().optional(),
+  name: z.string().optional(),
+  tag: z.string().optional(),
+  motto: z.string().optional(),
+  members: z.array(clanModerationMember).optional(),
+})
+
+const clanModeration = z.object({
+  clans: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      tag: z.string(),
+      motto: z.string(),
+      emblem: z.string(),
+      color: z.string(),
+      members: z.array(clanModerationMember),
+    }),
+  ),
+  moderation: z.object({
+    creation_bans: z.array(clanModerationAction),
+    banned_clans: z.array(clanModerationAction),
+    history: z.array(clanModerationAction),
+    persisted: z.boolean(),
+  }),
+  muted_steam_ids: z.array(z.string()).nullish(),
+})
+
 export const gcSchemas = {
+  clanModeration,
   status,
   match,
   matchPage,

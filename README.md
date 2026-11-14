@@ -39,6 +39,17 @@ goes to the coordinator, which validates it, applies it at once and keeps it
 in its `data/settings.json` (over `gc.json`) with a history of who changed
 what.
 
+Administrators use `/admin/moderation` (**Clans and users**) to inspect clan
+rosters, ban/delete clans, reserve prohibited names and tags, forbid clan
+creation for individual players or every current member of a removed clan,
+mute/unmute menu chat and delete retained menu messages. Player profiles link
+to these controls and to existing matchmaking/Steam bans. Every action needs
+a reason; the actor comes from the signed-in session. Clan decisions are
+audited in the GC's private `clans.jsonl`, mutes in settings history and chat
+removal in the journal. Restrictions survive restarts when GC persistent
+storage is configured. Unbanning a clan releases its name and tag without
+restoring it or lifting individual restrictions.
+
 Players sign in through Steam. The session is an encrypted cookie with the
 SteamID, the Steam name and the avatar. Who is an admin comes from `ADMINS`
 and `SUPER_USERS`; the coordinator trusts this site's admin key, so keep the
