@@ -523,6 +523,7 @@ const clanModerationAction = z.object({
   restrict_members: z.boolean().optional(),
   name: z.string().optional(),
   tag: z.string().optional(),
+  new_tag: z.string().optional(),
   motto: z.string().optional(),
   members: z.array(clanModerationMember).optional(),
 })
@@ -549,6 +550,30 @@ const clanModeration = z.object({
 })
 
 export const gcSchemas = {
+  chatModeration: z.object({
+    epoch: z.string(),
+    muted_steam_ids: z.array(z.string()).nullish(),
+    disabled: z.boolean(),
+    lines: z.array(
+      z.object({
+        id: z.number().int(),
+        at: z.number(),
+        ch: z.string(),
+        from: z.string().optional(),
+        name: z.string().optional(),
+        tag: z.string().optional(),
+        text: z.string().optional(),
+        key: z.string().optional(),
+        args: z.array(z.string()).optional(),
+        source: z.enum(['menu', 'match']),
+        channel: z.string(),
+        server: z.string().optional(),
+        match: z.string().optional(),
+      }),
+    ),
+    next: z.number().int(),
+    servers: z.array(z.object({ steam_id: z.string(), name: z.string(), synced: z.boolean() })),
+  }),
   clanModeration,
   status,
   match,

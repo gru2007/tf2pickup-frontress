@@ -59,6 +59,30 @@ export default routes(async app => {
     },
   )
   app.post(
+    '/clans/:clanId/tag',
+    {
+      config: { authorize: [PlayerRole.admin] },
+      schema: {
+        params: z.object({ clanId: z.string().regex(/^[a-z2-9]{8}$/) }),
+        body: z.object({ tag: z.string().trim().min(2).max(5), reason }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        await gc.moderateClan(request.params.clanId, request.user!.player.steamId, {
+          action: 'set_tag',
+          tag: request.body.tag,
+          reason: request.body.reason,
+        })
+        request.flash('success', 'Clan tag updated. Members and progress are preserved.')
+      } catch (error) {
+        if (!gc.isGcError(error)) throw error
+        request.flash('error', error.message)
+      }
+      return reply.redirect('/admin/moderation')
+    },
+  )
+  app.post(
     '/players',
     {
       config: { authorize: [PlayerRole.admin] },

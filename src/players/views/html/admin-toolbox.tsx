@@ -43,7 +43,10 @@ export async function AdminToolbox(props: { steamId: SteamId64 }) {
             Logs
           </a>
           <a href={`/admin/moderation?steamId=${props.steamId}`} class="text-sm underline">
-            Clans and chat
+            Clans
+          </a>
+          <a href={`/admin/chat?steamId=${props.steamId}`} class="text-sm underline">
+            Chat
           </a>
           <a
             href={`/players/${props.steamId}/edit`}

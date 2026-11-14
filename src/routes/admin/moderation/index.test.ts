@@ -8,15 +8,18 @@ import { PlayerRole } from '../../../auth/player-role'
 import { steamId64 } from '../../../shared/schemas/steam-id-64'
 import { gc } from '../../../gc'
 import moderationRoutes from './index'
+import chatRoutes from '../chat'
 
 vi.mock('../../../gc', () => ({
   gc: {
     moderateClan: vi.fn().mockResolvedValue({ ok: 'ok' }),
     moderatePlayer: vi.fn().mockResolvedValue({ ok: 'ok' }),
+    deleteChatMessage: vi.fn().mockResolvedValue({ ok: 'ok' }),
     isGcError: () => false,
   },
 }))
 vi.mock('../../../admin/moderation/views/html/moderation.page', () => ({ ModerationPage: vi.fn() }))
+vi.mock('../../../admin/chat/views/html/chat.page', () => ({ ChatPage: vi.fn() }))
 
 const actor = steamId64.parse('76561197960265729')
 const target = steamId64.parse('76561197960265730')
@@ -54,6 +57,7 @@ beforeEach(async () => {
   )
   await app.register(authorize)
   await app.register(moderationRoutes, { prefix: '/admin/moderation' })
+  await app.register(chatRoutes, { prefix: '/admin/chat' })
 })
 afterEach(async () => {
   await app.close()
@@ -61,10 +65,19 @@ afterEach(async () => {
 
 describe('moderation routes', () => {
   it('requires an authenticated administrator for every mutation', async () => {
-    for (const url of ['/admin/moderation/players', '/admin/moderation/clans/abcdefgh']) {
-      const payload = url.endsWith('/players')
-        ? { steamId: target, action: 'mute', reason: 'abuse' }
-        : { action: 'ban', reason: 'symbols', confirm: 'yes' }
+    for (const { url, payload } of [
+      {
+        url: '/admin/moderation/players',
+        payload: { steamId: target, action: 'mute', reason: 'abuse' },
+      },
+      {
+        url: '/admin/moderation/clans/abcdefgh',
+        payload: { action: 'ban', reason: 'symbols', confirm: 'yes' },
+      },
+      { url: '/admin/moderation/clans/abcdefgh/tag', payload: { tag: 'NEW', reason: 'symbols' } },
+      { url: '/admin/chat/players', payload: { steamId: target, action: 'mute', reason: 'abuse' } },
+      { url: '/admin/chat/messages/1', payload: { reason: 'abuse', epoch: '123' } },
+    ]) {
       for (const [headers, status] of [
         [{}, 401],
         [{ 'x-test-role': 'player' }, 403],
@@ -75,6 +88,37 @@ describe('moderation routes', () => {
     }
     expect(vi.mocked(gc.moderateClan).mock.calls.length).toBe(0)
     expect(vi.mocked(gc.moderatePlayer).mock.calls.length).toBe(0)
+    expect(vi.mocked(gc.deleteChatMessage).mock.calls.length).toBe(0)
+  })
+
+  it('edits tags and deletes chat using the signed-in moderator', async () => {
+    const headers = { 'x-test-role': 'admin' }
+    const tag = await app.inject({
+      method: 'POST',
+      url: '/admin/moderation/clans/abcdefgh/tag',
+      headers,
+      payload: { tag: 'NEW', reason: 'symbols', actor: target },
+    })
+    expect(tag.statusCode).toBe(302)
+    expect(gc.moderateClan).toHaveBeenCalledWith('abcdefgh', actor, {
+      action: 'set_tag',
+      tag: 'NEW',
+      reason: 'symbols',
+    })
+    const deleted = await app.inject({
+      method: 'POST',
+      url: '/admin/chat/messages/1',
+      headers,
+      payload: { reason: 'abuse', epoch: '123', actor: target },
+    })
+    expect(deleted.statusCode).toBe(302)
+    expect(gc.deleteChatMessage).toHaveBeenCalledWith(1, actor, 'abuse', '123')
+    const read = await app.inject({
+      method: 'GET',
+      url: '/admin/chat',
+      headers: { 'x-test-role': 'player' },
+    })
+    expect(read.statusCode).toBe(403)
   })
 
   it('sends the session actor and only the GC player action fields', async () => {

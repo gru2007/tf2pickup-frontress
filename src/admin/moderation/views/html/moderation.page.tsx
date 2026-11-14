@@ -69,9 +69,9 @@ export async function ModerationPage(props: { steamId?: string | undefined; q: s
             <select name="action">
               <option value="restrict_creation">Forbid creating clans</option>
               <option value="allow_creation">Allow creating clans</option>
-              <option value="mute">Mute menu chat (all channels)</option>
-              <option value="unmute">Unmute menu chat</option>
-              <option value="clear_chat">Delete retained menu messages</option>
+              <option value="mute">Mute text chat in menu and matches</option>
+              <option value="unmute">Unmute text chat</option>
+              <option value="clear_chat">Delete retained messages</option>
             </select>
           </label>
           <label>
@@ -82,6 +82,9 @@ export async function ModerationPage(props: { steamId?: string | undefined; q: s
           </button>
         </form>
         <p class="text-sm">
+          <a class="underline" href="/admin/chat">
+            View chat and moderate individual messages.
+          </a>{' '}
           Restrictions last until lifted. A clan creation restriction allows joining other clans.
           Chat decisions are recorded in{' '}
           <a class="underline" href="/admin/view-for-nerds">
@@ -142,6 +145,25 @@ export async function ModerationPage(props: { steamId?: string | undefined; q: s
                 </li>
               ))}
             </ul>
+            <form
+              action={`/admin/moderation/clans/${clan.id}/tag`}
+              method="post"
+              class="mb-4 flex flex-wrap items-end gap-3"
+              hx-boost="false"
+            >
+              <label>
+                New tag <input name="tag" value={clan.tag} required minlength="2" maxlength="5" />
+              </label>
+              <label>
+                Reason <input name="reason" required maxlength="300" />
+              </label>
+              <button class="button" type="submit">
+                Change tag
+              </button>
+              <p class="w-full text-sm">
+                Changes the tag immediately and keeps the clan, its members and progress.
+              </p>
+            </form>
             <form
               action={`/admin/moderation/clans/${clan.id}`}
               method="post"
@@ -217,6 +239,7 @@ export async function ModerationPage(props: { steamId?: string | undefined; q: s
               </AdminCell>
               <AdminCell>
                 <span safe>{entry.action}</span>
+                {entry.new_tag !== undefined && <p safe>{`${entry.tag} → ${entry.new_tag}`}</p>}
                 <br />
                 <span safe>
                   {entry.steam_id ?? `${entry.name ?? ''} [${entry.tag ?? ''}] ${entry.clan ?? ''}`}

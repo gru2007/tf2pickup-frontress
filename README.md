@@ -40,9 +40,15 @@ in its `data/settings.json` (over `gc.json`) with a history of who changed
 what.
 
 Administrators use `/admin/moderation` (**Clans and users**) to inspect clan
-rosters, ban/delete clans, reserve prohibited names and tags, forbid clan
+rosters, change tags without deleting clans, ban/delete clans, reserve prohibited names and tags, forbid clan
 creation for individual players or every current member of a removed clan,
-mute/unmute menu chat and delete retained menu messages. Player profiles link
+mute/unmute text chat and delete retained messages. `/admin/chat` (**Chat**)
+shows menu and match chat with source/player/text filters, individual message
+removal and mute controls. Match server policy acknowledgements show whether
+each connected server has applied the latest settings. Updated server binaries
+are required for match moderation; deploy the GC before those binaries.
+Removing a match record cannot erase text already printed in players' HUD or
+console. Player profiles link
 to these controls and to existing matchmaking/Steam bans. Every action needs
 a reason; the actor comes from the signed-in session. Clan decisions are
 audited in the GC's private `clans.jsonl`, mutes in settings history and chat

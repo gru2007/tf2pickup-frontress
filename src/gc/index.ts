@@ -117,11 +117,22 @@ export const gc = {
   quests: (steamId: SteamId64) => request(gcSchemas.quests, `/v1/player/${steamId}/quests`),
 
   // admin
+  chatModeration: (params: { source?: string; steam_id?: string; q?: string; before?: number }) =>
+    request(gcSchemas.chatModeration, `/admin/v1/chat${query(params)}`, { admin: true }),
+  deleteChatMessage: (messageId: number, actor: SteamId64, reason: string, epoch: string) =>
+    request(gcSchemas.ok, `/admin/v1/chat/${messageId}/delete`, {
+      admin: true,
+      method: 'POST',
+      actor,
+      body: { reason, epoch },
+    }),
   clanModeration: () => request(gcSchemas.clanModeration, '/admin/v1/clans', { admin: true }),
   moderateClan: (
     clanId: string,
     actor: SteamId64,
-    body: { action: 'ban' | 'delete' | 'unban'; reason: string; restrict_members: boolean },
+    body:
+      | { action: 'ban' | 'delete' | 'unban'; reason: string; restrict_members: boolean }
+      | { action: 'set_tag'; reason: string; tag: string },
   ) =>
     request(gcSchemas.ok, `/admin/v1/clans/${encodeURIComponent(clanId)}`, {
       admin: true,

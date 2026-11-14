@@ -63,6 +63,7 @@ const adminPages = {
     icon: IconUserExclamation,
     section: 'Moderation',
   },
+  chat: { title: 'Chat', icon: IconLogs, section: 'Moderation' },
   'player-restrictions': {
     title: 'Player restrictions',
     icon: IconUserExclamation,
